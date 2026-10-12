@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smarthome</title>
+<style>
+  :root {
+    --bg: #0f1524;
+    --panel: #161d2e;
+    --wall: #1a2234;
+    --line: #34405a;
+    --furn: #283249;
+    --text: #c9d2e3;
+    --dim: #7d89a3;
+    --lamp: #f5c46a;
+    --heat: #ef6b4f;
+    --cool: #5bb0ec;
+    --fan: #63d39a;
+    --mono: ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, "Segoe UI", "DejaVu Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 var(--sans);
+  }
+  main {
+    display: grid; gap: 20px; padding: 20px; max-width: 1400px; margin: 0 auto;
+    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+    align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px; } }
+
+  .banner {
+    display: none; grid-column: 1 / -1; padding: 10px 14px; border-radius: 8px;
+    background: #3a1f24; color: #ffb4a6; border: 1px solid #6b2d33;
+  }
+  .banner.show { display: block; }
+
+  /* ---------- Haus ---------- */
+  .house { background: var(--panel); border-radius: 14px; padding: 12px; }
+  .house svg { width: 100%; height: auto; display: block; }
+  .room-label { font: 600 10px var(--mono); fill: var(--dim); letter-spacing: .08em; }
+  .lamp { cursor: pointer; }
+  .lamp:focus-visible { outline: none; }
+  .lamp:focus-visible circle { stroke: var(--text); stroke-width: 2; }
+  .window { cursor: default; }
+  .window.sim { cursor: pointer; }
+  .fan-blades { transform-box: fill-box; transform-origin: center; }
+  .fan-blades.on { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .garage-door {
+    transform-box: fill-box; transform-origin: top;
+    transition: transform 3.6s linear;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fan-blades.on { animation: none; }
+    .garage-door { transition: none; }
+  }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip {
+    font: 12px var(--mono); color: var(--dim); padding: 5px 11px;
+    border: 1px solid var(--line); border-radius: 999px;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.warn { border-color: #7a4a2a; }
+  .chip.warn b { color: var(--lamp); }
+
+  /* ---------- Seitenleiste ---------- */
+  aside { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  section { background: var(--panel); border-radius: 14px; padding: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  h3 { font-size: 13px; margin: 16px 0 8px; color: var(--dim); font-weight: 500; }
+  h3:first-of-type { margin-top: 0; }
+  #windowBlock h3 { margin-top: 16px; }
+
+  /* Chat */
+  .chat { display: flex; flex-direction: column; height: 440px; }
+  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: #26324d; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: #1f283b; border-bottom-left-radius: 4px; }
+  .msg .acts { display: block; margin-top: 6px; font: 12px var(--mono); color: var(--dim); }
+  .msg.wait { color: var(--dim); font-style: italic; }
+  .empty { color: var(--dim); font-size: 14px; margin: auto 0; }
+  .chat form { display: flex; gap: 8px; margin-top: 12px; }
+  input[type=text] {
+    flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit;
+  }
+  button {
+    font: inherit; color: var(--text); background: #232d44; border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 14px; cursor: pointer;
+  }
+  button:hover { background: #2b3753; }
+  button.primary { background: var(--lamp); color: #1b1608; border-color: var(--lamp); font-weight: 600; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .linkbtn { background: none; border: none; color: var(--dim); padding: 0; font-size: 13px; }
+  .linkbtn:hover { background: none; color: var(--text); }
+  .chat-head { display: flex; justify-content: space-between; align-items: baseline; }
+
+  /* Steuerung */
+  .light-row { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 10px; margin: 6px 0; }
+  .light-row span:last-child { text-align: right; font: 13px var(--mono); color: var(--dim); }
+  input[type=range] { width: 100%; accent-color: var(--lamp); }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { padding: 6px 12px; font-size: 14px; }
+  .seg button.active { background: #33405f; border-color: var(--text); }
+  .stepper { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .stepper output { font: 600 18px var(--mono); min-width: 80px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <div class="banner" id="banner">
+    Das Haus ist nicht erreichbar. Prüfe, ob der ESP Strom hat und im WLAN ist, und ob die IP in config.py stimmt.
+  </div>
+
+  <!-- ==================== Modellhaus ==================== -->
+  <div class="house">
+    <svg viewBox="0 0 620 420" role="img" aria-label="Modellhaus">
+      <defs>
+        <radialGradient id="glow" cx="0.5" cy="0.12" r="0.85">
+          <stop offset="0" stop-color="#f5c46a" stop-opacity=".55"/>
+          <stop offset=".55" stop-color="#f5c46a" stop-opacity=".12"/>
+          <stop offset="1" stop-color="#f5c46a" stop-opacity="0"/>
+        </radialGradient>
+        <pattern id="slats" width="10" height="9" patternUnits="userSpaceOnUse">
+          <rect width="10" height="9" fill="#3a4766"/>
+          <line x1="0" y1="8.5" x2="10" y2="8.5" stroke="#2a3550"/>
+        </pattern>
+      </defs>
+
+      <!-- Nachthimmel -->
+      <g fill="#c9d2e3" opacity=".7">
+        <circle cx="70" cy="40" r="1.2"/><circle cx="150" cy="95" r="1"/><circle cx="330" cy="45" r="1.3"/>
+        <circle cx="470" cy="50" r="1"/><circle cx="560" cy="170" r="1.2"/><circle cx="440" cy="125" r="1"/>
+        <circle cx="250" cy="22" r="1"/>
+      </g>
+      <path d="M548 55 a26 26 0 1 0 22 40 a21 21 0 1 1 -22 -40z" fill="#d7dbe4"/>
+
+      <!-- Dach -->
+      <polygon points="40,170 235,78 430,170" fill="#1a2234" stroke="#34405a" stroke-width="2"/>
+      <circle cx="235" cy="136" r="12" fill="#0f1524" stroke="#34405a" stroke-width="2"/>
+
+      <!-- Räume (Glow-Rechteck wird je nach Helligkeit eingeblendet) -->
+      <g id="rooms"></g>
+
+      <!-- Möbel Schlafzimmer -->
+      <g fill="#283249">
+        <rect x="76" y="238" width="6" height="34"/><rect x="82" y="254" width="92" height="18" rx="3"/>
+        <rect x="88" y="248" width="24" height="8" rx="3"/><rect x="180" y="258" width="20" height="14"/>
+      </g>
+      <!-- Arbeitszimmer -->
+      <g fill="#283249">
+        <rect x="248" y="204" width="28" height="68"/>
+        <rect x="300" y="248" width="86" height="4"/><rect x="304" y="252" width="3" height="20"/><rect x="379" y="252" width="3" height="20"/>
+        <rect x="328" y="224" width="32" height="20" rx="2"/><rect x="342" y="244" width="4" height="4"/>
+      </g>
+      <g id="plant">
+        <path d="M392 262 q-8 -16 -2 -26 q4 10 2 26z M394 262 q6 -18 14 -20 q-4 12 -14 20z" fill="#3f7a5a"/>
+        <rect x="386" y="262" width="16" height="10" rx="2" fill="#6b4f3a"/>
+        <text id="soilText" x="394" y="225" text-anchor="middle" class="room-label">--%</text>
+      </g>
+      <!-- Wohnzimmer -->
+      <g fill="#283249">
+        <rect x="112" y="362" width="78" height="20" rx="4"/><rect x="108" y="352" width="10" height="30" rx="3"/><rect x="184" y="352" width="10" height="30" rx="3"/>
+      </g>
+      <rect id="heater" x="70" y="350" width="22" height="28" rx="3" fill="#283249"/>
+      <g id="ac">
+        <rect x="150" y="310" width="62" height="13" rx="4" fill="#283249" stroke="#34405a"/>
+        <circle id="acDot" cx="204" cy="316.5" r="2.5" fill="#7d89a3"/>
+      </g>
+      <text id="tempText" x="224" y="346" text-anchor="end" style="font: 700 20px var(--mono)" fill="#c9d2e3">--,- °C</text>
+      <text id="humText" x="224" y="361" text-anchor="end" class="room-label">-- % Luftfeuchte</text>
+      <!-- Küche -->
+      <g fill="#283249">
+        <rect x="246" y="300" width="60" height="14"/><rect x="246" y="352" width="114" height="38"/>
+      </g>
+      <g transform="translate(382 318)">
+        <circle r="16" fill="#0f1524" stroke="#34405a" stroke-width="2"/>
+        <g id="fanBlades" class="fan-blades" fill="#7d89a3">
+          <ellipse cx="0" cy="-7" rx="4" ry="7"/>
+          <ellipse cx="0" cy="-7" rx="4" ry="7" transform="rotate(120)"/>
+          <ellipse cx="0" cy="-7" rx="4" ry="7" transform="rotate(240)"/>
+        </g>
+      </g>
+
+      <!-- Garage -->
+      <rect x="402" y="256" width="176" height="10" rx="2" fill="#1a2234" stroke="#34405a" stroke-width="2"/>
+      <rect x="425" y="300" width="132" height="90" fill="#0f1524" stroke="#34405a" stroke-width="2"/>
+      <rect id="garageDoor" class="garage-door" x="427" y="301" width="128" height="88" fill="url(#slats)"/>
+
+      <!-- Fenster und Lampen -->
+      <g id="windows"></g>
+      <g id="lamps"></g>
+
+      <line x1="18" y1="391" x2="602" y2="391" stroke="#34405a" stroke-width="3"/>
+    </svg>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <!-- ==================== Seitenleiste ==================== -->
+  <aside>
+    <section class="chat">
+      <div class="chat-head">
+        <h2>Mit dem Haus sprechen</h2>
+        <button class="linkbtn" id="resetChat" type="button">Verlauf leeren</button>
+      </div>
+      <div class="log" id="log">
+        <p class="empty">Schreib einfach, was du willst, zum Beispiel „Mir ist kalt“ oder „Ich gehe jetzt schlafen“.</p>
+      </div>
+      <form id="chatForm">
+        <input type="text" id="chatInput" placeholder="Nachricht an das Haus" autocomplete="off" aria-label="Nachricht">
+        <button class="primary" id="sendBtn" type="submit">Senden</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Steuerung</h2>
+      <h3>Licht</h3>
+      <div id="lightControls"></div>
+
+      <h3>Klima</h3>
+      <div class="seg" id="climateSeg">
+        <button type="button" data-mode="off">Aus</button>
+        <button type="button" data-mode="heat">Heizen</button>
+        <button type="button" data-mode="cool">Kühlen</button>
+        <button type="button" data-mode="auto">Auto</button>
+      </div>
+      <div class="stepper">
+        <button type="button" id="tempDown" aria-label="Zieltemperatur senken">−</button>
+        <output id="targetOut">--,- °C</output>
+        <button type="button" id="tempUp" aria-label="Zieltemperatur erhöhen">+</button>
+      </div>
+
+      <h3>Lüfter</h3>
+      <div class="seg" id="fanSeg">
+        <button type="button" data-mode="auto">Auto</button>
+        <button type="button" data-mode="on">An</button>
+        <button type="button" data-mode="off">Aus</button>
+      </div>
+
+      <h3>Garagentor</h3>
+      <button type="button" id="garageBtn">Öffnen</button>
+
+      <div id="windowBlock" hidden>
+        <h3>Fenster (simuliert)</h3>
+        <div class="seg" id="windowSeg"></div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<script>
+const ROOMS = {
+  schlafzimmer:  { name: "Schlafzimmer",  x: 60,  y: 170, w: 175, h: 110, lx: 176 },
+  arbeitszimmer: { name: "Arbeitszimmer", x: 235, y: 170, w: 175, h: 110, lx: 362 },
+  wohnzimmer:    { name: "Wohnzimmer",    x: 60,  y: 280, w: 175, h: 110, lx: 176 },
+  kueche:        { name: "Küche",         x: 235, y: 280, w: 175, h: 110, lx: 300 },
+  garage:        { name: "Garage",        x: 410, y: 266, w: 160, h: 124, lx: 492 },
+};
+const WINDOWS = {
+  schlafzimmer: { x: 200, y: 200 },
+  wohnzimmer:   { x: 72,  y: 308 },
+  kueche:       { x: 320, y: 300 },
+};
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const fmt = n => n.toFixed(1).replace(".", ",");
+
+let state = null;
+let dragging = null;     // Raum, dessen Slider gerade bewegt wird
+let pendingTarget = null;
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+// ---------- Haus einmalig aufbauen ----------
+function buildHouse() {
+  const rooms = $("rooms"), lamps = $("lamps"), wins = $("windows");
+  for (const [id, r] of Object.entries(ROOMS)) {
+    el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "#1a2234", stroke: "#34405a", "stroke-width": 2 }, rooms);
+    el("rect", { id: "glow-" + id, x: r.x + 1, y: r.y + 1, width: r.w - 2, height: r.h - 2, fill: "url(#glow)", opacity: 0 }, rooms);
+    const t = el("text", { x: r.x + 10, y: r.y + 18, class: "room-label" }, rooms);
+    t.textContent = r.name.toUpperCase();
+
+    const g = el("g", { class: "lamp", tabindex: 0, role: "button", "aria-label": "Licht " + r.name + " umschalten" }, lamps);
+    el("line", { x1: r.lx, y1: r.y, x2: r.lx, y2: r.y + 12, stroke: "#34405a", "stroke-width": 1.5 }, g);
+    el("circle", { id: "lamp-" + id, cx: r.lx, cy: r.y + 18, r: 6, fill: "#4a5570" }, g);
+    const toggle = () => sendCommands([{ device: "light", room: id, action: (state?.lights?.[id] ?? 0) > 0 ? "off" : "on" }]);
+    g.addEventListener("click", toggle);
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  }
+  for (const [id, w] of Object.entries(WINDOWS)) {
+    const g = el("g", { id: "win-" + id, class: "window" }, wins);
+    el("rect", { x: w.x, y: w.y, width: 26, height: 32, rx: 2, fill: "#22314f", stroke: "#34405a", "stroke-width": 2 }, g);
+    el("line", { x1: w.x + 13, y1: w.y, x2: w.x + 13, y2: w.y + 32, stroke: "#34405a", "stroke-width": 1.5 }, g);
+    const title = el("title", {}, g);
+    g.addEventListener("click", () => {
+      if (!state?.simulatedWindows?.includes(id)) return;
+      sendCommands([{ device: "window", room: id, action: state.windows[id] === "open" ? "close" : "open" }]);
+    });
+  }
+}
+
+// ---------- Steuerung aufbauen ----------
+function buildControls() {
+  const box = $("lightControls");
+  for (const [id, r] of Object.entries(ROOMS)) {
+    const row = document.createElement("div");
+    row.className = "light-row";
+    row.innerHTML = `<label for="sl-${id}">${r.name}</label>
+      <input type="range" id="sl-${id}" min="0" max="100" step="5" value="0">
+      <span id="val-${id}">0 %</span>`;
+    box.appendChild(row);
+    const sl = row.querySelector("input");
+    sl.addEventListener("pointerdown", () => dragging = id);
+    sl.addEventListener("input", () => $("val-" + id).textContent = sl.value + " %");
+    sl.addEventListener("change", () => {
+      dragging = null;
+      sendCommands([{ device: "light", room: id, action: "set", value: +sl.value }]);
+    });
+  }
+  $("climateSeg").addEventListener("click", e => {
+    const mode = e.target.dataset.mode;
+    if (mode) sendCommands([{ device: "climate", action: mode, value: currentTarget() }]);
+  });
+  $("fanSeg").addEventListener("click", e => {
+    const mode = e.target.dataset.mode;
+    if (mode) sendCommands([{ device: "fan", action: mode }]);
+  });
+  const step = d => {
+    pendingTarget = Math.max(10, Math.min(30, currentTarget() + d));
+    $("targetOut").textContent = fmt(pendingTarget) + " °C";
+    sendCommands([{ device: "climate", action: state?.climate?.mode || "auto", value: pendingTarget }]);
+  };
+  $("tempDown").addEventListener("click", () => step(-0.5));
+  $("tempUp").addEventListener("click", () => step(0.5));
+  $("garageBtn").addEventListener("click", () => {
+    const open = ["open", "opening"].includes(state?.garage);
+    sendCommands([{ device: "garage", action: open ? "close" : "open" }]);
+  });
+}
+
+const currentTarget = () => pendingTarget ?? state?.climate?.target ?? 21;
+
+// ---------- Zustand anzeigen ----------
+function render(s) {
+  $("banner").classList.toggle("show", !s.online);
+  if (!s.online) return;
+  state = s;
+
+  for (const id of Object.keys(ROOMS)) {
+    const v = s.lights?.[id] ?? 0;
+    $("glow-" + id).setAttribute("opacity", v / 100);
+    $("lamp-" + id).setAttribute("fill", v > 0 ? "#f5c46a" : "#4a5570");
+    $("lamp-" + id).setAttribute("fill-opacity", v > 0 ? 0.45 + v / 180 : 1);
+    if (dragging !== id) {
+      $("sl-" + id).value = v;
+      $("val-" + id).textContent = v + " %";
+    }
+  }
+
+  const t = s.sensors?.temperature, h = s.sensors?.humidity;
+  $("tempText").textContent = t == null ? "--,- °C" : fmt(t) + " °C";
+  $("humText").textContent = h == null ? "-- % Luftfeuchte" : Math.round(h) + " % Luftfeuchte";
+  $("soilText").textContent = (s.sensors?.soilPercent ?? "--") + " %";
+
+  const c = s.climate || {};
+  $("heater").setAttribute("fill", c.heating ? "#ef6b4f" : "#283249");
+  $("acDot").setAttribute("fill", c.cooling ? "#5bb0ec" : "#7d89a3");
+  $("fanBlades").classList.toggle("on", !!s.fan?.on);
+  $("fanBlades").setAttribute("fill", s.fan?.on ? "#63d39a" : "#7d89a3");
+
+  const g = s.garage;
+  $("garageDoor").style.transform = (g === "open" || g === "opening") ? "scaleY(0.08)" : "scaleY(1)";
+  $("garageBtn").textContent = (g === "open" || g === "opening") ? "Schließen" : "Öffnen";
+
+  for (const id of Object.keys(WINDOWS)) {
+    const open = s.windows?.[id] === "open";
+    const sim = s.simulatedWindows?.includes(id);
+    const g = $("win-" + id);
+    g.classList.toggle("sim", !!sim);
+    g.querySelector("rect").setAttribute("stroke", open ? "#f5c46a" : "#34405a");
+    g.querySelector("rect").setAttribute("fill", open ? "#0f1524" : "#22314f");
+    g.querySelector("title").textContent = ROOMS[id].name + ": Fenster " + (open ? "offen" : "zu") + (sim ? " (klicken zum Umschalten)" : "");
+  }
+
+  if (pendingTarget !== null && Math.abs(pendingTarget - c.target) < 0.01) pendingTarget = null;
+  $("targetOut").textContent = fmt(currentTarget()) + " °C";
+  setActive("climateSeg", c.mode);
+  setActive("fanSeg", s.fan?.mode);
+
+  const simWins = s.simulatedWindows || [];
+  $("windowBlock").hidden = simWins.length === 0;
+  $("windowSeg").innerHTML = "";
+  for (const id of simWins) {
+    const b = document.createElement("button");
+    b.type = "button";
+    const open = s.windows[id] === "open";
+    b.textContent = ROOMS[id].name + (open ? " offen" : " zu");
+    b.classList.toggle("active", open);
+    b.onclick = () => sendCommands([{ device: "window", room: id, action: open ? "close" : "open" }]);
+    $("windowSeg").appendChild(b);
+  }
+
+  renderChips(s);
+}
+
+function setActive(segId, mode) {
+  for (const b of $(segId).querySelectorAll("button")) b.classList.toggle("active", b.dataset.mode === mode);
+}
+
+function renderChips(s) {
+  const c = s.climate || {};
+  const modeTxt = { off: "aus", heat: "heizt auf", cool: "kühlt auf", auto: "hält" }[c.mode] || "?";
+  const lightsOn = Object.entries(s.lights || {}).filter(([, v]) => v > 0);
+  const openWins = Object.entries(s.windows || {}).filter(([, v]) => v === "open").map(([k]) => ROOMS[k].name);
+  const garageTxt = { open: "offen", closed: "zu", opening: "öffnet …", closing: "schließt …" }[s.garage] || "?";
+
+  const chips = [
+    ["Klima", c.mode === "off" ? "aus" : `${modeTxt} ${fmt(c.target)} °C`],
+    ["Licht", lightsOn.length ? lightsOn.map(([k, v]) => `${ROOMS[k].name} ${v} %`).join(", ") : "alles aus"],
+    ["Lüfter", s.fan?.on ? "an" : "aus"],
+    ["Garagentor", garageTxt, s.garage !== "closed"],
+  ];
+  if (openWins.length) chips.push(["Fenster offen", openWins.join(", "), true]);
+
+  $("chips").innerHTML = chips.map(([k, v, warn]) =>
+    `<span class="chip${warn ? " warn" : ""}">${k} <b>${v}</b></span>`).join("");
+}
+
+// ---------- Kommunikation ----------
+async function refresh() {
+  try {
+    const r = await fetch("/api/state");
+    render(await r.json());
+  } catch { render({ online: false }); }
+}
+
+async function sendCommands(commands) {
+  try {
+    await fetch("/api/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands }),
+    });
+  } finally { refresh(); }
+}
+
+// ---------- Chat ----------
+const DEV_TXT = {
+  light: c => `Licht ${ROOMS[c.room]?.name || "überall"} ${c.action === "off" ? "aus" : c.action === "on" ? "an" : c.value + " %"}`,
+  climate: c => `Klima ${{ off: "aus", heat: "heizen", cool: "kühlen", auto: "auto" }[c.action]}${c.value ? " " + fmt(c.value) + " °C" : ""}`,
+  fan: c => `Lüfter ${{ on: "an", off: "aus", auto: "auto" }[c.action]}`,
+  garage: c => `Garagentor ${c.action === "open" ? "öffnen" : "schließen"}`,
+};
+
+function addMsg(text, who, acts) {
+  const log = $("log");
+  log.querySelector(".empty")?.remove();
+  const m = document.createElement("div");
+  m.className = "msg " + who;
+  m.textContent = text;
+  if (acts?.length) {
+    const a = document.createElement("span");
+    a.className = "acts";
+    a.textContent = acts.map(c => (DEV_TXT[c.device] || (() => c.device))(c)).join(" · ");
+    m.appendChild(a);
+  }
+  log.appendChild(m);
+  log.scrollTop = log.scrollHeight;
+  return m;
+}
+
+$("chatForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const text = $("chatInput").value.trim();
+  if (!text) return;
+  $("chatInput").value = "";
+  addMsg(text, "user");
+  const wait = addMsg("Das Haus denkt nach …", "bot wait");
+  $("sendBtn").disabled = true;
+  try {
+    const r = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json();
+    wait.remove();
+    addMsg(d.antwort || "(keine Antwort)", "bot", d.befehle);
+  } catch {
+    wait.remove();
+    addMsg("Der Pi antwortet nicht. Läuft app.py noch?", "bot");
+  } finally {
+    $("sendBtn").disabled = false;
+    $("chatInput").focus();
+    refresh();
+  }
+});
+
+$("resetChat").addEventListener("click", async () => {
+  await fetch("/api/chat/reset", { method: "POST" });
+  $("log").innerHTML = '<p class="empty">Verlauf geleert. Das Haus hat die vorherigen Nachrichten vergessen.</p>';
+});
+
+buildHouse();
+buildControls();
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
