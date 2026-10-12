@@ -8,6 +8,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <WebServer.h>
+#include <vector>
 
 // -------------------- Pins & Constants --------------------
 constexpr int SENSOR_PIN = 34;
@@ -44,6 +45,17 @@ WebServer server(80);
 // -------------------- State --------------------
 bool garageOpen = false;
 int currentServoAngle = 0;
+
+// Aktueller Zustand der Aktoren (fuer /api/state)
+String ledColor = "off";   // "off", "red", "green", "blue", ...
+bool ledAuto = true;       // true = LED zeigt automatisch Temperatur-Status an
+bool buzzerOn = false;
+
+// Letzte Messwerte (fuer /api/state, werden alle 2 s aktualisiert)
+float lastTemperature = NAN;
+float lastHumidity = NAN;
+int lastSoilRaw = 0;
+int lastSoilPercent = 0;
 
 unsigned long lastSensorPrint = 0;
 unsigned long lastGatewaySend = 0;
@@ -97,6 +109,16 @@ void setColor(bool red, bool green, bool blue) {
   digitalWrite(LED_RED, red ? HIGH : LOW);
   digitalWrite(LED_GREEN, green ? HIGH : LOW);
   digitalWrite(LED_BLUE, blue ? HIGH : LOW);
+
+  // Farbe als Text merken, damit /api/state sie melden kann
+  if (red && green && blue) ledColor = "white";
+  else if (red && green) ledColor = "yellow";
+  else if (red && blue) ledColor = "purple";
+  else if (green && blue) ledColor = "cyan";
+  else if (red) ledColor = "red";
+  else if (green) ledColor = "green";
+  else if (blue) ledColor = "blue";
+  else ledColor = "off";
 }
 
 void loadConfig() {
@@ -568,64 +590,108 @@ void handleLogout() {
 }
 
 // -------------------- Command-Endpoint --------------------
+// Fuehrt einen einzelnen Befehl aus. Gibt "" zurueck wenn ok, sonst eine Fehlermeldung.
+String executeCommand(const String& device, const String& action) {
+  if (device == "garage") {
+    if (action == "open") openGarage();
+    else if (action == "close") closeGarage();
+    else return "unknown garage action";
+  } else if (device == "led") {
+    if (action == "auto") { ledAuto = true; return ""; }
+    if (action == "red_on") setColor(true, false, false);
+    else if (action == "green_on") setColor(false, true, false);
+    else if (action == "blue_on") setColor(false, false, true);
+    else if (action == "off") setColor(false, false, false);
+    else return "unknown led action";
+    ledAuto = false;  // manueller Befehl -> Automatik aus, sonst ueberschreibt loop() die Farbe
+  } else if (device == "buzzer") {
+    if (action == "on") { digitalWrite(BUZZER_PIN, HIGH); buzzerOn = true; }
+    else if (action == "off") { digitalWrite(BUZZER_PIN, LOW); buzzerOn = false; }
+    else return "unknown buzzer action";
+  } else {
+    return "unknown device";
+  }
+  return "";
+}
+
+// POST /api/command
+// Einzelbefehl:   {"device":"led","action":"red_on"}
+// Mehrere:        {"commands":[{"device":"led","action":"red_on"},{"device":"garage","action":"open"}]}
 void handleCommand() {
   if (!server.hasArg("plain") || server.arg("plain").length() == 0) {
     server.send(400, "application/json", "{\"error\":\"no body\"}");
     return;
   }
 
-  String body = server.arg("plain");
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, body);
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) {
     server.send(400, "application/json", "{\"error\":\"invalid json\"}");
     return;
   }
 
-  String device = doc["device"] | "";
-  String action = doc["action"] | "";
+  JsonDocument resp;
+  JsonArray results = resp["results"].to<JsonArray>();
+  bool allOk = true;
 
-  if (device == "garage") {
-    if (action == "open") {
-      openGarage();
-    } else if (action == "close") {
-      closeGarage();
-    } else {
-      server.send(400, "application/json", "{\"error\":\"unknown garage action\"}");
-      return;
-    }
-  } else if (device == "led") {
-    if (action == "red_on") {
-      setColor(true, false, false);
-    } else if (action == "green_on") {
-      setColor(false, true, false);
-    } else if (action == "blue_on") {
-      setColor(false, false, true);
-    } else if (action == "off") {
-      setColor(false, false, false);
-    } else {
-      server.send(400, "application/json", "{\"error\":\"unknown led action\"}");
-      return;
-    }
-  } else if (device == "buzzer") {
-    if (action == "on") {
-      digitalWrite(BUZZER_PIN, HIGH);
-    } else if (action == "off") {
-      digitalWrite(BUZZER_PIN, LOW);
-    } else {
-      server.send(400, "application/json", "{\"error\":\"unknown buzzer action\"}");
-      return;
+  // Liste der Befehle sammeln (Einzelbefehl oder "commands"-Array)
+  std::vector<std::pair<String, String>> cmds;
+  JsonArray arr = doc["commands"].as<JsonArray>();
+  if (!arr.isNull()) {
+    for (JsonObject c : arr) {
+      cmds.push_back({String(c["device"] | ""), String(c["action"] | "")});
     }
   } else {
-    server.send(400, "application/json", "{\"error\":\"unknown device\"}");
-    return;
+    cmds.push_back({String(doc["device"] | ""), String(doc["action"] | "")});
   }
 
-  JsonDocument resp;
-  resp["status"] = "ok";
+  for (auto& cmd : cmds) {
+    const String& device = cmd.first;
+    const String& action = cmd.second;
+    String error = executeCommand(device, action);
+
+    Serial.println("Command: " + device + " -> " + action + (error.length() ? String(" | FEHLER: ") + error : String(" | ok")));
+
+    JsonObject r = results.add<JsonObject>();
+    r["device"] = device;
+    r["action"] = action;
+    r["ok"] = (error.length() == 0);
+    if (error.length()) {
+      r["error"] = error;
+      allOk = false;
+    }
+  }
+
+  resp["status"] = allOk ? "ok" : "error";
   String respStr;
   serializeJson(resp, respStr);
-  server.send(200, "application/json", respStr);
+  server.send(allOk ? 200 : 400, "application/json", respStr);
+}
+
+// -------------------- State-Endpoint --------------------
+// GET /api/state -> aktueller Zustand aller Sensoren und Geraete
+void handleState() {
+  JsonDocument doc;
+  doc["deviceId"] = deviceId;
+  doc["room"] = roomName;
+  doc["uptimeMs"] = millis();
+
+  JsonObject sensors = doc["sensors"].to<JsonObject>();
+  if (isnan(lastTemperature)) sensors["temperature"] = nullptr;
+  else sensors["temperature"] = lastTemperature;
+  if (isnan(lastHumidity)) sensors["humidity"] = nullptr;
+  else sensors["humidity"] = lastHumidity;
+  sensors["soilPercent"] = lastSoilPercent;
+
+  JsonObject devices = doc["devices"].to<JsonObject>();
+  devices["garage"] = garageOpen ? "open" : "closed";
+  devices["led"] = ledColor;
+  devices["ledMode"] = ledAuto ? "auto" : "manual";
+  devices["buzzer"] = buzzerOn ? "on" : "off";
+
+  String out;
+  serializeJson(doc, out);
+  server.send(200, "application/json", out);
 }
 
 // -------------------- Setup / Loop --------------------
@@ -662,6 +728,7 @@ void setup() {
   server.on("/settings", HTTP_POST, handleSettingsPost);
   server.on("/logout", HTTP_GET, handleLogout);
   server.on("/api/command", HTTP_POST, handleCommand);
+  server.on("/api/state", HTTP_GET, handleState);
 
   server.begin();
 
@@ -692,47 +759,50 @@ void loop() {
     IrReceiver.resume();
   }
 
-  int sensorValue = readSoilRaw();
-  int moisturePercent = readSoilPercent();
-
-  float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
-
+  // Sensoren nur alle 2 s lesen (DHT11 ist langsam), Werte fuer /api/state merken
   if (millis() - lastSensorPrint >= SENSOR_PRINT_INTERVAL_MS) {
     lastSensorPrint = millis();
 
+    lastSoilRaw = readSoilRaw();
+    lastSoilPercent = readSoilPercent();
+    lastHumidity = dht.readHumidity();
+    lastTemperature = dht.readTemperature();
+
     Serial.print("Raw: ");
-    Serial.print(sensorValue);
+    Serial.print(lastSoilRaw);
     Serial.print(" | Bodenfeuchtigkeit: ");
-    Serial.print(moisturePercent);
+    Serial.print(lastSoilPercent);
     Serial.print(" %");
 
-    if (isnan(humidity) || isnan(temperature)) {
+    if (isnan(lastHumidity) || isnan(lastTemperature)) {
       Serial.println(" | DHT11 Lesefehler");
-      setColor(false, false, true);
+      if (ledAuto) setColor(false, false, true);
     } else {
       Serial.print(" | Raumtemperatur: ");
-      Serial.print(temperature);
+      Serial.print(lastTemperature);
       Serial.print(" C | Luftfeuchtigkeit: ");
-      Serial.print(humidity);
+      Serial.print(lastHumidity);
       Serial.print(" % | Garage: ");
       Serial.println(garageOpen ? "OFFEN" : "GESCHLOSSEN");
 
-      if (temperature < 30.0) {
-        setColor(false, true, false);
-      } else {
-        setColor(true, false, false);
+      // Status-LED nur im Automatik-Modus, sonst bleibt die per Befehl gesetzte Farbe
+      if (ledAuto) {
+        if (lastTemperature < 30.0) {
+          setColor(false, true, false);
+        } else {
+          setColor(true, false, false);
+        }
       }
     }
 
     // Sample im Buffer speichern
-    pushSensorSample(temperature, humidity, sensorValue, moisturePercent, garageOpen);
+    pushSensorSample(lastTemperature, lastHumidity, lastSoilRaw, lastSoilPercent, garageOpen);
   }
 
   // Push an Gateway (bestehend, falls du das noch brauchst)
   if (millis() - lastGatewaySend >= GATEWAY_SEND_INTERVAL_MS) {
     lastGatewaySend = millis();
-    sendDataToGateway(temperature, humidity, sensorValue, moisturePercent);
+    sendDataToGateway(lastTemperature, lastHumidity, lastSoilRaw, lastSoilPercent);
   }
 
   // Push an Pi
