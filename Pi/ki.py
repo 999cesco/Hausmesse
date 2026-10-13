@@ -78,9 +78,18 @@ situation   = der Nutzer beschreibt eine Lage oder ein Vorhaben ("Mir ist kalt",
               (offene Fenster, offenes Garagentor).
 wissen      = allgemeine Frage ohne Bezug zum Haus ("Wie hoch ist der Mount Everest?").
 sonstiges   = alles andere (Begrüßung, Danke, Unverständliches).
+gemischt    = der Satz hat MEHRERE Teile, z. B. etwas schalten UND etwas fragen
+              ("Mach das Licht an und sag mir, wie warm es ist"). Erledige dann ALLE Teile:
+              Befehle in "befehle", und in "antwort" NUR die übrigen Teile (Werte, Wissen).
+
+Bei "befehl" und "gemischt" bestätigt das System die Befehle automatisch.
+Schreib dann in "antwort" NICHTS über das Schalten ("Ich habe das Licht angemacht" weglassen).
+Bei "befehl" bleibt "antwort" deshalb leer: "".
 
 REGELN
-- Antworte auf Deutsch, natürlich und KURZ (1-2 Sätze). Die Antwort wird vorgelesen.
+- Der Text kommt aus einer Spracherkennung und kann falsch erkannte Wörter enthalten
+  (z. B. "Kratz" statt "Grad", "Küchen Licht" statt "Küchenlicht"). Rate, was gemeint war.
+- Antworte auf Deutsch, natürlich und KURZ (1-2 Sätze pro Teil). Die Antwort wird vorgelesen.
 - Lies NIEMALS den Zustand des Hauses vor, wenn nicht danach gefragt wurde.
   Erwähne nie andere Räume oder Geräte als die, um die es geht.
 - WICHTIG: Was du schalten willst, MUSS als Befehl in "befehle" (oder als "szene") stehen.
@@ -114,21 +123,25 @@ Nutzer: Ich gehe jetzt schlafen
 {"art":"situation","antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
 
 Nutzer: Ja bitte
-{"art":"befehl","antwort":"Alles klar, ich schließe das Garagentor.","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
+{"art":"befehl","antwort":"","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
 
 Nutzer: Mach im Arbeitszimmer Licht, aber nicht so hell
-{"art":"befehl","antwort":"Ich habe das Licht im Arbeitszimmer auf 40 Prozent gestellt.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}],"rueckfrage":false}
+{"art":"befehl","antwort":"","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}],"rueckfrage":false}
 
 Nutzer: Garage öffnen
-{"art":"befehl","antwort":"Ich öffne das Garagentor.","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
+{"art":"befehl","antwort":"","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
 
 Zustand: 23 °C, Luftfeuchtigkeit 50 %, alle Lichter an, Klima aus, Fenster im Schlafzimmer offen.
 Nutzer: Mach das Licht in der Küche aus
-{"art":"befehl","antwort":"Das Licht in der Küche ist aus.","szene":"","befehle":[{"device":"light","room":"kueche","action":"off"}],"rueckfrage":false}
+{"art":"befehl","antwort":"","szene":"","befehle":[{"device":"light","room":"kueche","action":"off"}],"rueckfrage":false}
 
 Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Klima aus, Fenster im Schlafzimmer offen.
 Nutzer: Wie warm ist es?
 {"art":"statusfrage","antwort":"Im Haus hat es gerade 23 Grad.","szene":"","befehle":[],"rueckfrage":false}
+
+Zustand: 21 °C, Luftfeuchtigkeit 45 %, Lichter aus.
+Nutzer: Mach alle Lichter an und sag mir, wie viel Kratz es hat, und erzähl was über Beethoven
+{"art":"gemischt","antwort":"Im Haus hat es 21 Grad. Beethoven war ein deutscher Komponist aus Bonn, der viele seiner berühmtesten Werke schrieb, als er schon fast taub war.","szene":"","befehle":[{"device":"light","room":"alle","action":"on"}],"rueckfrage":false}
 
 Nutzer: Wie hoch ist der Mount Everest?
 {"art":"wissen","antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
@@ -138,7 +151,8 @@ Nutzer: Wie hoch ist der Mount Everest?
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "art": {"type": "string", "enum": ["befehl", "statusfrage", "situation", "wissen", "sonstiges"]},
+        "art": {"type": "string", "enum": ["befehl", "statusfrage", "situation", "wissen",
+                                           "gemischt", "sonstiges"]},
         "antwort": {"type": "string"},
         "szene": {"type": "string", "enum": [""] + list(SCENES.keys())},
         "befehle": {
@@ -367,6 +381,8 @@ def handle(user_text):
         elif result.get("art") == "befehl" and commands and not result.get("szene"):
             antwort = confirm(commands)        # nur bestaetigen, nichts anderes erzaehlen
             rueckfrage = False
+        elif result.get("art") == "gemischt" and commands and not result.get("szene"):
+            antwort = (confirm(commands) + " " + antwort).strip()   # Bestaetigung + Rest der Antwort
         if esp_result and esp_result.get("status") == "error":
             antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
 
