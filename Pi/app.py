@@ -1,6 +1,6 @@
 """
 Webserver auf dem Pi: Dashboard, manuelle Steuerung und KI-Chat.
-Start:  python3 app.py   ->   im Browser http://<Pi-IP>:5000
+Start:  ~/venv/bin/python3 app.py   ->   im Browser http://<Pi-IP>:5000
 """
 
 import requests
@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 import config
 import ki
+import tts
 
 app = Flask(__name__, static_folder="static")
 
@@ -44,7 +45,9 @@ def chat():
     text = ((request.get_json(silent=True) or {}).get("text") or "").strip()
     if not text:
         return jsonify({"antwort": "", "befehle": []}), 400
-    return jsonify(ki.handle(text))
+    result = ki.handle(text)
+    tts.say(result.get("antwort", ""))
+    return jsonify(result)
 
 
 @app.post("/api/chat/reset")
@@ -54,4 +57,5 @@ def chat_reset():
 
 
 if __name__ == "__main__":
+    tts.start()  # Stimme einmal laden, bleibt danach im Speicher
     app.run(host="0.0.0.0", port=config.WEB_PORT, threaded=True)
