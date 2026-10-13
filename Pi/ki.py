@@ -67,18 +67,30 @@ guten_morgen = Schlafzimmer 60 %, Küche hell, Klima auto auf 21 °C
 alles_aus    = alle Lichter, Klima und Lüfter aus
 Sonst "szene": "".
 
+ART DER ANFRAGE (Feld "art") - entscheide das ZUERST:
+befehl      = der Nutzer will etwas Bestimmtes schalten ("Licht in der Küche an", "Garage öffnen",
+              "Heizung auf 22 Grad"). Antworte NUR mit einer kurzen Bestätigung, z. B.
+              "Das Licht in der Küche ist an." KEINE anderen Räume, KEINE Werte, KEINE Hinweise.
+statusfrage = der Nutzer fragt nach einem Zustand ("Wie warm ist es?", "Ist die Garage zu?").
+              Nenne NUR genau das, wonach gefragt wurde.
+situation   = der Nutzer beschreibt eine Lage oder ein Vorhaben ("Mir ist kalt", "Ich gehe ins Bett",
+              "Ich gehe aus dem Haus"). NUR hier darfst du mitdenken und passende HINWEISE nennen
+              (offene Fenster, offenes Garagentor).
+wissen      = allgemeine Frage ohne Bezug zum Haus ("Wie hoch ist der Mount Everest?").
+sonstiges   = alles andere (Begrüßung, Danke, Unverständliches).
+
 REGELN
 - Antworte auf Deutsch, natürlich und KURZ (1-2 Sätze). Die Antwort wird vorgelesen.
-- Lies NIEMALS den ganzen Zustand vor. Nenne nur die Werte, die zur Frage passen
-  (bei "Mir ist kalt" die Temperatur, bei "Ist im Wohnzimmer Licht an?" nur dieses Licht).
+- Lies NIEMALS den Zustand des Hauses vor, wenn nicht danach gefragt wurde.
+  Erwähne nie andere Räume oder Geräte als die, um die es geht.
 - WICHTIG: Was du schalten willst, MUSS als Befehl in "befehle" (oder als "szene") stehen.
   Nur das wird ausgeführt. Behaupte nie, etwas getan zu haben, ohne den passenden Befehl.
 - Es gibt nur EINE Heizung/Klimaanlage für das ganze Haus, keine pro Raum.
   Die Garage hat nur Licht und das Tor.
 - "Garage öffnen/aufmachen" = Garagentor open. "Garage zu" = Garagentor close.
 - Denk mit: "Mir ist kalt" heißt heizen. Prüfe dafür die aktuelle Temperatur.
-- Wenn unter HINWEISE etwas steht (offenes Fenster, offenes Garagentor), erwähne es nur,
-  wenn es zur Situation passt (Kälte, Schlafen, Verlassen des Hauses).
+- HINWEISE (offenes Fenster, offenes Garagentor) erwähnst du NUR bei art "situation"
+  und nur, wenn sie dazu passen (Kälte, Schlafen, Verlassen des Hauses).
   Biete bei einem offenen Garagentor an, es zu schließen, schließe es aber nicht ungefragt.
 - Stelle KEINE Fragen, außer du bietest eine konkrete Aktion an ("Soll ich das Garagentor
   schließen?"). Frage nie "Wie geht es dir?" oder "Kann ich noch etwas tun?".
@@ -95,33 +107,38 @@ REGELN
 BEISPIELE
 Zustand: 18 °C, Klima aus. Hinweise: Fenster im Wohnzimmer ist offen.
 Nutzer: Mir ist kalt
-{"antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"climate","action":"heat","value":22}],"rueckfrage":false}
+{"art":"situation","antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"climate","action":"heat","value":22}],"rueckfrage":false}
 
 Zustand: Lichter an. Hinweise: Fenster im Wohnzimmer ist offen. Garagentor ist offen.
 Nutzer: Ich gehe jetzt schlafen
-{"antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
+{"art":"situation","antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
 
 Nutzer: Ja bitte
-{"antwort":"Alles klar, ich schließe das Garagentor.","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
+{"art":"befehl","antwort":"Alles klar, ich schließe das Garagentor.","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
 
 Nutzer: Mach im Arbeitszimmer Licht, aber nicht so hell
-{"antwort":"Ich habe das Licht im Arbeitszimmer auf 40 Prozent gestellt.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}],"rueckfrage":false}
+{"art":"befehl","antwort":"Ich habe das Licht im Arbeitszimmer auf 40 Prozent gestellt.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}],"rueckfrage":false}
 
 Nutzer: Garage öffnen
-{"antwort":"Ich öffne das Garagentor.","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
+{"art":"befehl","antwort":"Ich öffne das Garagentor.","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
 
-Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Klima aus.
+Zustand: 23 °C, Luftfeuchtigkeit 50 %, alle Lichter an, Klima aus, Fenster im Schlafzimmer offen.
+Nutzer: Mach das Licht in der Küche aus
+{"art":"befehl","antwort":"Das Licht in der Küche ist aus.","szene":"","befehle":[{"device":"light","room":"kueche","action":"off"}],"rueckfrage":false}
+
+Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Klima aus, Fenster im Schlafzimmer offen.
 Nutzer: Wie warm ist es?
-{"antwort":"Im Haus hat es gerade 23 Grad.","szene":"","befehle":[],"rueckfrage":false}
+{"art":"statusfrage","antwort":"Im Haus hat es gerade 23 Grad.","szene":"","befehle":[],"rueckfrage":false}
 
 Nutzer: Wie hoch ist der Mount Everest?
-{"antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
+{"art":"wissen","antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
 """
 
 # JSON-Schema: zwingt das Modell in genau dieses Antwortformat
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
+        "art": {"type": "string", "enum": ["befehl", "statusfrage", "situation", "wissen", "sonstiges"]},
         "antwort": {"type": "string"},
         "szene": {"type": "string", "enum": [""] + list(SCENES.keys())},
         "befehle": {
@@ -140,7 +157,7 @@ RESPONSE_SCHEMA = {
         },
         "rueckfrage": {"type": "boolean"},
     },
-    "required": ["antwort", "szene", "befehle", "rueckfrage"],
+    "required": ["art", "antwort", "szene", "befehle", "rueckfrage"],
 }
 
 _history = deque(maxlen=config.HISTORY_MESSAGES)
@@ -200,6 +217,42 @@ def validate(cmd, allow_window=False):
         return {"device": "window", "room": room, "action": action}
 
     return None
+
+
+# -------------------- Kurze Bestaetigungen (vom Code, nicht von der KI) --------------------
+ROOM_IN = {"schlafzimmer": "im Schlafzimmer", "arbeitszimmer": "im Arbeitszimmer",
+           "wohnzimmer": "im Wohnzimmer", "kueche": "in der Küche", "garage": "in der Garage"}
+
+
+def _num(v):
+    return f"{v:g}".replace(".", ",")
+
+
+def confirm_text(cmd):
+    d, a, v = cmd["device"], cmd["action"], cmd.get("value")
+    if d == "light":
+        wo = "Alle Lichter sind" if cmd["room"] == "alle" else f"Das Licht {ROOM_IN[cmd['room']]} ist"
+        if a == "set":
+            return f"{wo} auf {v} Prozent." if v > 0 else f"{wo} aus."
+        return f"{wo} {'an' if a == 'on' else 'aus'}."
+    if d == "climate":
+        ziel = f" auf {_num(v)} Grad" if v is not None else ""
+        return {"heat": f"Ich heize{ziel}.", "cool": f"Ich kühle{ziel}.",
+                "auto": f"Die Klimaregelung steht auf Automatik{ziel}.",
+                "off": "Heizung und Klimaanlage sind aus."}[a]
+    if d == "fan":
+        return {"on": "Der Lüfter ist an.", "off": "Der Lüfter ist aus.",
+                "auto": "Der Lüfter läuft jetzt automatisch."}[a]
+    if d == "garage":
+        return "Das Garagentor öffnet sich." if a == "open" else "Das Garagentor schließt sich."
+    return ""
+
+
+def confirm(commands):
+    """Feste, kurze Bestaetigung fuer einfache Schaltbefehle - die KI kann hier nicht abschweifen."""
+    if len(commands) > 3:
+        return "Erledigt."
+    return " ".join(confirm_text(c) for c in commands)
 
 
 # -------------------- Zustand fuer die KI aufbereiten --------------------
@@ -311,7 +364,10 @@ def handle(user_text):
         if ignored and not commands:
             antwort = "Das kann ich in diesem Haus leider nicht ausführen."
             rueckfrage = False
-        elif esp_result and esp_result.get("status") == "error":
+        elif result.get("art") == "befehl" and commands and not result.get("szene"):
+            antwort = confirm(commands)        # nur bestaetigen, nichts anderes erzaehlen
+            rueckfrage = False
+        if esp_result and esp_result.get("status") == "error":
             antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
 
         # Alles im Terminal ausgeben -> Fehlersuche wird einfach
@@ -326,6 +382,7 @@ def handle(user_text):
 
         return {
             "antwort": antwort,
+            "art": result.get("art", ""),
             "rueckfrage": rueckfrage,
             "szene": result.get("szene", ""),
             "befehle": commands,
