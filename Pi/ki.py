@@ -195,34 +195,52 @@ def send_commands(commands):
 
 # -------------------- Befehle pruefen --------------------
 def validate(cmd, allow_window=False):
-    """Gibt einen bereinigten Befehl zurueck oder None, wenn er ungueltig ist."""
+    """Gibt einen bereinigten Befehl zurueck oder None, wenn er ungueltig ist.
+    Kleine Formfehler der KI werden dabei repariert statt verworfen."""
     if not isinstance(cmd, dict):
         return None
-    device, action = cmd.get("device"), cmd.get("action")
+    device = str(cmd.get("device", "")).lower()
+    action = str(cmd.get("action", "")).lower()
     room, value = cmd.get("room"), cmd.get("value")
+    has_value = isinstance(value, (int, float)) and not isinstance(value, bool)
 
     if device == "light":
+        if room in (None, "", "all", "haus"):      # "alle Lichter an" ohne Raum
+            room = "alle"
         if room not in LIGHT_ROOMS + ["alle"]:
             return None
+        if action == "set" and not has_value:      # "set" ohne Wert -> einfach an
+            action = "on"
+        if action == "on" and has_value and 0 <= value < 100:
+            action = "set"                         # "on" mit Helligkeit -> dimmen
         if action == "set":
-            if not isinstance(value, (int, float)):
-                return None
             return {"device": "light", "room": room, "action": "set", "value": max(0, min(100, int(value)))}
         if action in ("on", "off"):
             return {"device": "light", "room": room, "action": action}
         return None
 
-    if device == "climate" and action in ("off", "heat", "cool", "auto"):
-        out = {"device": "climate", "action": action}
-        if isinstance(value, (int, float)):
-            out["value"] = max(10, min(30, round(float(value), 1)))
-        return out
+    if device == "climate":
+        if action in ("set", "on"):                # "Heizung auf 22" -> heizen
+            action = "heat"
+        if action in ("off", "heat", "cool", "auto"):
+            out = {"device": "climate", "action": action}
+            if has_value:
+                out["value"] = max(10, min(30, round(float(value), 1)))
+            return out
+        return None
 
-    if device == "fan" and action in ("on", "off", "auto"):
-        return {"device": "fan", "action": action}
+    if device == "fan":
+        if action == "set":
+            action = "on"
+        if action in ("on", "off", "auto"):
+            return {"device": "fan", "action": action}
+        return None
 
-    if device == "garage" and action in ("open", "close"):
-        return {"device": "garage", "action": action}
+    if device == "garage":
+        action = {"on": "open", "off": "close"}.get(action, action)
+        if action in ("open", "close"):
+            return {"device": "garage", "action": action}
+        return None
 
     if device == "buzzer" and action in ("on", "off") and allow_window:  # nur manuell
         return {"device": "buzzer", "action": action}
@@ -376,7 +394,9 @@ def handle(user_text):
         rueckfrage = bool(result.get("rueckfrage", False))
         # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
         if ignored and not commands:
-            antwort = "Das kann ich in diesem Haus leider nicht ausführen."
+            hinweis = "Das Schalten konnte ich leider nicht ausführen."
+            # Bei reinen Befehlen bleibt nur der Hinweis, sonst den Rest der Antwort behalten
+            antwort = hinweis if result.get("art") == "befehl" or not antwort else f"{hinweis} {antwort}"
             rueckfrage = False
         elif result.get("art") == "befehl" and commands and not result.get("szene"):
             antwort = confirm(commands)        # nur bestaetigen, nichts anderes erzaehlen
