@@ -6,8 +6,8 @@ Ablauf:
   2. Erkannt -> kurzer Signalton, Aufnahme startet.
   3. webrtcvad erkennt, wann du aufhoerst zu sprechen -> Aufnahme endet (zweiter Ton).
   4. Text an die KI (ki.handle), Antwort wird vorgelesen.
-  5. Endet die Antwort mit einer Frage ("Soll ich das schliessen?"), hoert der
-     Assistent direkt weiter zu - ohne erneutes Wakeword.
+  5. Stellt die KI eine echte Rueckfrage ("Soll ich das Garagentor schliessen?"),
+     hoert der Assistent direkt weiter zu - ohne erneutes Wakeword (hoechstens 2x).
 
 Waehrend der Pi selbst spricht, wird das Mikro ignoriert, damit er sich nicht selbst hoert.
 """
@@ -89,6 +89,31 @@ def _beep(sound):
 
 # ---------- Aufnahme bis Stille ----------
 
+def _rms(chunk):
+    a = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
+    return float(np.sqrt(np.mean(a * a)))
+
+
+_noise = 200.0   # Lautstaerke des Hintergrundrauschens, wird laufend gemessen
+
+
+def _update_noise(chunk):
+    """Lernt im Leerlauf, wie laut der Raum ohne Sprache ist."""
+    global _noise
+    level = _rms(chunk)
+    if level < _noise * 3:                     # laute Ausreisser (Sprache) nicht einrechnen
+        _noise = 0.95 * _noise + 0.05 * level
+
+
+def _is_speech(vad, chunk):
+    """Sprache nur, wenn webrtcvad sie erkennt UND es deutlich lauter ist als das Rauschen."""
+    if _rms(chunk) < max(_noise * getattr(config, "SPEECH_FACTOR", 2.5), 120):
+        return False
+    voiced = sum(vad.is_speech(chunk[i:i + VAD_FRAME * 2], SAMPLE_RATE)
+                 for i in range(0, len(chunk), VAD_FRAME * 2))
+    return voiced >= 3                         # mind. 60 von 80 ms klingen nach Sprache
+
+
 def _record_command(vad):
     """Nimmt auf, bis nach dem Sprechen eine kurze Pause kommt. Gibt PCM oder None zurueck."""
     frames = []
@@ -98,9 +123,7 @@ def _record_command(vad):
     while True:
         chunk = _audio.get()
         frames.append(chunk)
-        voiced = sum(vad.is_speech(chunk[i:i + VAD_FRAME * 2], SAMPLE_RATE)
-                     for i in range(0, len(chunk), VAD_FRAME * 2))
-        if voiced >= 2:                       # mind. 40 ms Sprache in diesem Block
+        if _is_speech(vad, chunk):
             speech_seen = True
             silence_ms = 0
         else:
@@ -110,8 +133,11 @@ def _record_command(vad):
         if not speech_seen and waited_ms >= config.LISTEN_TIMEOUT_MS:
             return None                        # niemand hat etwas gesagt
         if speech_seen and silence_ms >= config.SILENCE_END_MS:
+            print(f"[VOICE] Aufnahme {waited_ms / 1000:.1f} s (Pause erkannt, Rauschpegel {_noise:.0f})")
             return b"".join(frames)
         if waited_ms >= config.MAX_RECORD_MS:
+            print(f"[VOICE] Aufnahme abgebrochen nach {waited_ms / 1000:.1f} s - Raum zu laut? "
+                  f"Rauschpegel {_noise:.0f}, SPEECH_FACTOR erhoehen")
             return b"".join(frames)
 
 
@@ -120,7 +146,7 @@ def _record_command(vad):
 def _dialog(vad):
     """Ein Gespraechsdurchgang inkl. Rueckfragen."""
     global status
-    while True:
+    for _ in range(1 + getattr(config, "MAX_FOLLOWUPS", 2)):
         status = "hoert_zu"
         _flush()
         _beep(SOUND_START)
@@ -152,9 +178,10 @@ def _dialog(vad):
         tts.say(antwort)
         time.sleep(0.2)
         tts.wait_done()
+        time.sleep(0.4)                        # Nachhall des Lautsprechers abwarten
 
-        # Rueckfrage? Dann ohne Wakeword direkt weiter zuhoeren
-        if not antwort.rstrip().endswith("?"):
+        # Nur bei einer echten Rueckfrage ohne Wakeword weiter zuhoeren
+        if not result.get("rueckfrage"):
             return
 
 
@@ -168,6 +195,7 @@ def _loop():
     vad = webrtcvad.Vad(config.VAD_LEVEL)
     threading.Thread(target=_mic_reader, daemon=True).start()
     print(f"[VOICE] Bereit - sag '{config.WAKEWORD}'")
+    quiet_until = 0
 
     while True:
         status = "stumm" if _muted else ("spricht" if tts.is_busy() else "bereit")
@@ -175,9 +203,15 @@ def _loop():
             _flush()
             model.reset()
             time.sleep(0.1)
+            quiet_until = time.time() + 0.6    # kurz nach dem Sprechen nicht auf sich selbst reagieren
+            continue
+        if time.time() < quiet_until:
+            _flush()
+            time.sleep(0.05)
             continue
 
         chunk = _audio.get()
+        _update_noise(chunk)
         scores = model.predict(np.frombuffer(chunk, dtype=np.int16))
         score = max(scores.values())
         if score >= config.WAKEWORD_THRESHOLD and not _muted:
@@ -188,6 +222,7 @@ def _loop():
                 print(f"[VOICE] Fehler im Dialog: {e}")
             model.reset()
             _flush()
+            quiet_until = time.time() + 0.6
 
 
 def start():

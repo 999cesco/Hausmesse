@@ -63,11 +63,16 @@ Die KI versteht, **was** gemeint ist. Fester Code sorgt dafür, dass es **zuverl
 Hausmesse/
 ├── src/main.cpp      # ESP32: Sensoren, Geräte, Temperaturregelung
 ├── platformio.ini    # PlatformIO-Konfiguration
-└── pi/               # Raspberry Pi
-    ├── app.py        # Webserver für Dashboard und Chat
-    ├── ki.py         # KI-Logik, Szenen, Befehlsprüfung
-    ├── config.py     # Einstellungen
-    └── static/       # Dashboard mit dem Modellhaus
+├── Pi/               # Raspberry Pi
+│   ├── app.py        # Webserver für Dashboard und Chat
+│   ├── ki.py         # KI-Logik, Szenen, Befehlsprüfung
+│   ├── voice.py      # Wakeword, Aufnahme, Gesprächsablauf
+│   ├── stt.py        # Spracherkennung (schickt Aufnahme an den Server)
+│   ├── tts.py        # Sprachausgabe mit Piper
+│   ├── config.py     # Einstellungen
+│   └── static/       # Dashboard mit dem Modellhaus
+└── server/
+    └── stt_server.py # Spracherkennung mit Whisper auf dem KI-Server
 ```
 
 ---
@@ -75,7 +80,7 @@ Hausmesse/
 ## Technik
 
 **Hardware:** ESP32 · Raspberry Pi 4 · DHT11 · Bodenfeuchtesensor · Servo · Buzzer · IR-Empfänger · LEDs
-**Software:** C++ (Arduino / PlatformIO) · Python (Flask) · Ollama · HTML/SVG/JavaScript
+**Software:** C++ (Arduino / PlatformIO) · Python (Flask) · Ollama · Whisper · Piper · openWakeWord · HTML/SVG/JavaScript
 
 ---
 
@@ -84,7 +89,7 @@ Hausmesse/
 - [x] Modellhaus mit Sensoren, Licht, Klima-Regelung und Garagentor
 - [x] Web-Dashboard mit Live-Modellhaus und manueller Steuerung
 - [x] KI-Chat mit Szenen, Erinnerungen und Rückfragen
-- [ ] Sprachausgabe
-- [ ] Spracherkennung mit Wakeword
+- [x] Sprachausgabe
+- [x] Spracherkennung mit Wakeword
 - [ ] Echte Fensterkontakte
 - [ ] Anbindung an den KI-Server der Firma

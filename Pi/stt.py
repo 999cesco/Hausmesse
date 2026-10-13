@@ -18,9 +18,18 @@ import config
 
 SAMPLE_RATE = 16000
 
-# Hilft Whisper, die Fachwoerter des Hauses richtig zu schreiben
-VOCAB_PROMPT = ("Smarthome, Heizung, Klimaanlage, Luefter, Garagentor, Schlafzimmer, "
-                "Arbeitszimmer, Wohnzimmer, Kueche, Garage, Fenster, Licht, Grad.")
+# Saetze, die Whisper bei Stille oder Rauschen gerne "erfindet" (aus Untertitel-Trainingsdaten)
+HALLUCINATIONS = ("untertitel", "zdf", "vielen dank fürs zuschauen", "vielen dank für's zuschauen",
+                  "bis zum nächsten mal", "amara.org", "copyright", "swr")
+
+
+def clean(text):
+    """Leert den Text, wenn er wie eine typische Whisper-Erfindung aussieht."""
+    low = text.lower()
+    if any(h in low for h in HALLUCINATIONS):
+        print(f"[STT] Verworfen (typische Halluzination): '{text}'")
+        return ""
+    return text
 
 _local_model = None
 
@@ -53,12 +62,13 @@ def transcribe(pcm):
         load()
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
         segments, _ = _local_model.transcribe(audio, language="de", beam_size=1,
-                                              initial_prompt=VOCAB_PROMPT)
-        text = " ".join(s.text for s in segments).strip()
+                                              vad_filter=True,
+                                              condition_on_previous_text=False)
+        text = " ".join(s.text for s in segments if s.no_speech_prob < 0.6).strip()
     else:
         r = requests.post(config.STT_URL, data=pcm_to_wav(pcm),
                           headers={"Content-Type": "audio/wav"}, timeout=30)
         r.raise_for_status()
         text = r.json().get("text", "").strip()
     print(f"[STT] ({time.time() - start:.1f} s) '{text}'")
-    return text
+    return clean(text)

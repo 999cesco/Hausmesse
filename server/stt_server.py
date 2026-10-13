@@ -1,0 +1,55 @@
+"""
+Spracherkennungs-Dienst fuer den KI-Server (laeuft neben Ollama).
+
+Der Pi schickt eine WAV-Aufnahme an  POST http://<Server>:9000/transcribe
+und bekommt  {"text": "..."}  zurueck.
+
+Installation:  pip install faster-whisper flask
+Start:         python stt_server.py
+Beim ersten Start wird das Whisper-Modell einmalig heruntergeladen.
+"""
+
+import io
+import time
+import wave
+
+import numpy as np
+from faster_whisper import WhisperModel
+from flask import Flask, jsonify, request
+
+MODEL = "small"     # tiny / base / small / medium - groesser = genauer, aber langsamer
+DEVICE = "cpu"      # "cpu" oder "cuda" (NVIDIA-Grafikkarte, braucht installierte CUDA-12-Bibliotheken)
+COMPUTE = "int8"    # bei "cuda" besser "float16"
+PORT = 9000
+
+print(f"Lade Whisper-Modell '{MODEL}' ...")
+start = time.time()
+model = WhisperModel(MODEL, device=DEVICE, compute_type=COMPUTE)
+print(f"Fertig in {time.time() - start:.1f} s")
+
+app = Flask(__name__)
+
+
+@app.get("/")
+def info():
+    return jsonify({"dienst": "stt", "modell": MODEL})
+
+
+@app.post("/transcribe")
+def transcribe():
+    start = time.time()
+    with wave.open(io.BytesIO(request.get_data()), "rb") as w:
+        if w.getframerate() != 16000 or w.getnchannels() != 1 or w.getsampwidth() != 2:
+            return jsonify({"error": "erwarte 16 kHz, mono, 16 Bit"}), 400
+        pcm = w.readframes(w.getnframes())
+    audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+    # vad_filter schneidet Stille weg -> Whisper erfindet bei Rauschen keine Woerter
+    segments, _ = model.transcribe(audio, language="de", beam_size=5, vad_filter=True,
+                                   condition_on_previous_text=False)
+    text = " ".join(s.text for s in segments if s.no_speech_prob < 0.6).strip()
+    print(f"({time.time() - start:.1f} s) {text}")
+    return jsonify({"text": text})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT, threaded=False)

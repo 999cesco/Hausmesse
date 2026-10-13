@@ -68,36 +68,54 @@ alles_aus    = alle Lichter, Klima und Lüfter aus
 Sonst "szene": "".
 
 REGELN
-- Antworte auf Deutsch, natürlich und kurz (1-3 Sätze), die Antwort wird vorgelesen.
+- Antworte auf Deutsch, natürlich und KURZ (1-2 Sätze). Die Antwort wird vorgelesen.
+- Lies NIEMALS den ganzen Zustand vor. Nenne nur die Werte, die zur Frage passen
+  (bei "Mir ist kalt" die Temperatur, bei "Ist im Wohnzimmer Licht an?" nur dieses Licht).
+- WICHTIG: Was du schalten willst, MUSS als Befehl in "befehle" (oder als "szene") stehen.
+  Nur das wird ausgeführt. Behaupte nie, etwas getan zu haben, ohne den passenden Befehl.
+- Es gibt nur EINE Heizung/Klimaanlage für das ganze Haus, keine pro Raum.
+  Die Garage hat nur Licht und das Tor.
+- "Garage öffnen/aufmachen" = Garagentor open. "Garage zu" = Garagentor close.
 - Denk mit: "Mir ist kalt" heißt heizen. Prüfe dafür die aktuelle Temperatur.
-- Sag in der Antwort, was du getan hast, mit konkreten Werten.
-- Wenn unter HINWEISE etwas steht (offenes Fenster, offenes Garagentor), erwähne es,
+- Wenn unter HINWEISE etwas steht (offenes Fenster, offenes Garagentor), erwähne es nur,
   wenn es zur Situation passt (Kälte, Schlafen, Verlassen des Hauses).
   Biete bei einem offenen Garagentor an, es zu schließen, schließe es aber nicht ungefragt.
+- Stelle KEINE Fragen, außer du bietest eine konkrete Aktion an ("Soll ich das Garagentor
+  schließen?"). Frage nie "Wie geht es dir?" oder "Kann ich noch etwas tun?".
+  Setze "rueckfrage" nur dann auf true, sonst immer false.
 - Wenn du eine Frage gestellt hast und der Nutzer mit "ja" antwortet, führe das Angebotene aus.
+  Bei "nein" bestätige kurz und tu nichts.
 - Bei Bedingungen ("wenn es über 23 Grad hat ...") prüfe die aktuellen Werte und
   handle nur, wenn die Bedingung jetzt erfüllt ist. Sag, was du festgestellt hast.
-- Allgemeine Fragen (Wissen, Erklärungen) beantwortest du ganz normal, ohne Befehle.
+- Allgemeine Fragen (Wissen, Erklärungen) beantwortest du kurz und normal, ohne Befehle.
   Wenn du dir bei Fakten unsicher bist, sag das ehrlich. Erfinde nichts.
 - Erfinde keine Messwerte. Steht ein Wert als "kein Messwert", sag das.
+- Ergibt der Satz keinen Sinn (z. B. nur ein einzelnes Wort), frag kurz nach, was gemeint ist.
 
 BEISPIELE
 Zustand: 18 °C, Klima aus. Hinweise: Fenster im Wohnzimmer ist offen.
 Nutzer: Mir ist kalt
-{"antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"climate","action":"heat","value":22}]}
+{"antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"climate","action":"heat","value":22}],"rueckfrage":false}
 
 Zustand: Lichter an. Hinweise: Fenster im Wohnzimmer ist offen. Garagentor ist offen.
 Nutzer: Ich gehe jetzt schlafen
-{"antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[]}
+{"antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
 
 Nutzer: Ja bitte
-{"antwort":"Alles klar, ich schließe das Garagentor.","szene":"","befehle":[{"device":"garage","action":"close"}]}
+{"antwort":"Alles klar, ich schließe das Garagentor.","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
 
 Nutzer: Mach im Arbeitszimmer Licht, aber nicht so hell
-{"antwort":"Ich habe das Licht im Arbeitszimmer auf 40 Prozent gestellt.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}]}
+{"antwort":"Ich habe das Licht im Arbeitszimmer auf 40 Prozent gestellt.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"set","value":40}],"rueckfrage":false}
+
+Nutzer: Garage öffnen
+{"antwort":"Ich öffne das Garagentor.","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
+
+Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Klima aus.
+Nutzer: Wie warm ist es?
+{"antwort":"Im Haus hat es gerade 23 Grad.","szene":"","befehle":[],"rueckfrage":false}
 
 Nutzer: Wie hoch ist der Mount Everest?
-{"antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[]}
+{"antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
 """
 
 # JSON-Schema: zwingt das Modell in genau dieses Antwortformat
@@ -113,14 +131,16 @@ RESPONSE_SCHEMA = {
                 "properties": {
                     "device": {"type": "string", "enum": ["light", "climate", "fan", "garage"]},
                     "room": {"type": "string", "enum": LIGHT_ROOMS + ["alle"]},
-                    "action": {"type": "string"},
+                    "action": {"type": "string", "enum": ["on", "off", "set", "heat", "cool",
+                                                          "auto", "open", "close"]},
                     "value": {"type": "number"},
                 },
                 "required": ["device", "action"],
             },
         },
+        "rueckfrage": {"type": "boolean"},
     },
-    "required": ["antwort", "szene", "befehle"],
+    "required": ["antwort", "szene", "befehle", "rueckfrage"],
 }
 
 _history = deque(maxlen=config.HISTORY_MESSAGES)
@@ -247,7 +267,7 @@ def _ask_model(user_text, state):
         "format": RESPONSE_SCHEMA,
         "stream": False,
         "keep_alive": "30m",                  # Modell im Speicher halten -> schnellere Antworten
-        "options": {"temperature": 0.3, "num_ctx": 8192},  # genug Kontext fuer Prompt + Verlauf
+        "options": {"temperature": 0.2, "num_ctx": 8192},  # genug Kontext fuer Prompt + Verlauf
     }, timeout=120)
     r.raise_for_status()
     raw = r.json()["message"]["content"]
@@ -282,15 +302,31 @@ def handle(user_text):
         if commands:
             try:
                 esp_result = send_commands(commands)
-            except requests.RequestException:
+            except (requests.RequestException, ValueError):
                 esp_result = {"status": "error", "error": "ESP nicht erreichbar"}
+
+        antwort = result.get("antwort", "")
+        rueckfrage = bool(result.get("rueckfrage", False))
+        # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
+        if ignored and not commands:
+            antwort = "Das kann ich in diesem Haus leider nicht ausführen."
+            rueckfrage = False
+        elif esp_result and esp_result.get("status") == "error":
+            antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
+
+        # Alles im Terminal ausgeben -> Fehlersuche wird einfach
+        print(f"[KI] Nutzer:   {user_text}")
+        print(f"[KI] Modell:   {raw}")
+        print(f"[KI] Befehle:  {commands}" + (f"  IGNORIERT: {ignored}" if ignored else ""))
+        print(f"[KI] ESP:      {esp_result}")
 
         # Verlauf merken (ohne den langen Zustand), damit Rueckfragen wie "ja" funktionieren
         _history.append({"role": "user", "content": f"Nutzer: {user_text}"})
         _history.append({"role": "assistant", "content": raw})
 
         return {
-            "antwort": result.get("antwort", ""),
+            "antwort": antwort,
+            "rueckfrage": rueckfrage,
             "szene": result.get("szene", ""),
             "befehle": commands,
             "ignoriert": ignored,
