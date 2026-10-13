@@ -19,6 +19,7 @@ import config
 
 _voice = None
 _ready = threading.Event()
+_failed = False
 _queue = queue.Queue()
 
 
@@ -45,17 +46,23 @@ def _speak(text):
 
 
 def _worker():
+    global _failed
     try:
         _load_voice()
     except Exception as e:  # z. B. Stimme nicht gefunden
+        _failed = True
         print(f"[TTS] Stimme konnte nicht geladen werden: {e}")
-        return
+        while True:  # Warteschlange leeren, damit niemand ewig wartet
+            _queue.get()
+            _queue.task_done()
     while True:
         text = _queue.get()
         try:
             _speak(text)
         except Exception as e:
             print(f"[TTS] Fehler beim Vorlesen: {e}")
+        finally:
+            _queue.task_done()
 
 
 def start():
@@ -66,9 +73,21 @@ def start():
 
 def say(text):
     """Text zum Vorlesen einreihen (kehrt sofort zurueck)."""
-    if config.TTS_ENABLED and text and text.strip():
+    if config.TTS_ENABLED and not _failed and text and text.strip():
         _queue.put(text.strip())
 
 
 def is_ready():
     return _ready.is_set()
+
+
+def is_busy():
+    """True, solange noch etwas vorgelesen wird oder in der Warteschlange steht."""
+    return _queue.unfinished_tasks > 0
+
+
+def wait_done(timeout=60):
+    """Wartet, bis alles vorgelesen ist (damit das Mikro sich nicht selbst hoert)."""
+    end = time.time() + timeout
+    while is_busy() and time.time() < end:
+        time.sleep(0.05)

@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request, send_from_directory
 import config
 import ki
 import tts
+import voice
 
 app = Flask(__name__, static_folder="static")
 
@@ -50,6 +51,18 @@ def chat():
     return jsonify(result)
 
 
+@app.get("/api/voice")
+def voice_status():
+    return jsonify({"status": voice.status, "stumm": voice.is_muted(), **voice.last})
+
+
+@app.post("/api/voice/mute")
+def voice_mute():
+    data = request.get_json(silent=True) or {}
+    voice.set_muted(data.get("stumm", not voice.is_muted()))
+    return jsonify({"stumm": voice.is_muted()})
+
+
 @app.post("/api/chat/reset")
 def chat_reset():
     ki.reset_history()
@@ -57,5 +70,6 @@ def chat_reset():
 
 
 if __name__ == "__main__":
-    tts.start()  # Stimme einmal laden, bleibt danach im Speicher
+    tts.start()    # Stimme einmal laden, bleibt danach im Speicher
+    voice.start()  # Wakeword + Spracherkennung im Hintergrund
     app.run(host="0.0.0.0", port=config.WEB_PORT, threaded=True)
