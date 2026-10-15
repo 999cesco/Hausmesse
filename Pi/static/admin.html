@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einstellungen – Hausmesse</title>
+<style>
+  :root {
+    --bg: #0f1524; --panel: #161d2e; --inset: #121a2a; --line: #34405a; --text: #c9d2e3; --dim: #7d89a3;
+    --lamp: #f5c46a; --heat: #ef6b4f; --ok: #63d39a;
+    --mono: ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, "Segoe UI", "DejaVu Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+  a { color: var(--text); }
+
+  .topbar {
+    max-width: 1400px; margin: 0 auto; padding: 14px 20px 0;
+    display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--dim);
+  }
+  .topbar .back { margin-right: auto; color: var(--text); text-decoration: none; }
+  .topbar .back:hover { text-decoration: underline; }
+  .topbar b { color: var(--text); font-weight: 600; }
+  .topbar .back { white-space: nowrap; }
+  @media (max-width: 560px) { .topbar .pre { display: none; } }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 8px 20px 40px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 10px 0 18px; }
+  .cols { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .cols + .cols { margin-top: 20px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } main, .topbar { padding-left: 12px; padding-right: 12px; } }
+
+  section { background: var(--panel); border-radius: 14px; padding: 18px; min-width: 0; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 13px; margin: 0 0 14px; }
+
+  /* ---------- Zustand ---------- */
+  .comp { border-top: 1px solid var(--line); padding: 12px 0; }
+  .comp:first-child { border-top: none; padding-top: 4px; }
+  .comp-head { display: flex; align-items: center; gap: 10px; }
+  .comp-head h3 { font-size: 15px; font-weight: 600; margin: 0; }
+  .comp-head .state { margin-left: auto; font-size: 13px; color: var(--dim); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--dim); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(99, 211, 154, .15); }
+  .dot.warn { background: var(--lamp); box-shadow: 0 0 0 3px rgba(245, 196, 106, .15); }
+  .dot.bad { background: var(--heat); box-shadow: 0 0 0 3px rgba(239, 107, 79, .18); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; margin: 8px 0 0 20px; font-size: 14px; }
+  dt { color: var(--dim); }
+  dd { margin: 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+  .hint { margin: 8px 0 0 20px; font-size: 13px; color: var(--lamp); }
+  .hint.bad { color: var(--heat); }
+
+  /* ---------- Formulare ---------- */
+  fieldset { border: none; padding: 0; margin: 0 0 18px; }
+  legend { font-size: 13px; color: var(--dim); padding: 0; margin: 0 0 8px; }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 4px 14px; align-items: center; padding: 6px 0; }
+  .field label { font-size: 14px; }
+  .field .meta { display: block; font-size: 12px; color: var(--dim); }
+  .field .meta.changed { color: var(--lamp); }
+  @media (max-width: 560px) { .field { grid-template-columns: 1fr; } }
+
+  input[type=text], input[type=number], input[type=password], select {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--inset); color: var(--text); font: 14px var(--mono);
+  }
+  input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--lamp); justify-self: start; }
+  input:invalid { border-color: var(--heat); }
+
+  button {
+    font: 14px var(--sans); color: var(--text); background: #232d44; border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 14px; cursor: pointer;
+  }
+  button:hover { background: #2b3753; }
+  button.primary { background: var(--lamp); color: #1b1608; border-color: var(--lamp); font-weight: 600; }
+  button.danger { color: #ffb4a6; border-color: #6b2d33; }
+  button:disabled { opacity: .5; cursor: wait; }
+  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+    outline: 2px solid var(--lamp); outline-offset: 2px;
+  }
+  .linkbtn { background: none; border: none; color: var(--dim); padding: 0; font-size: 14px; }
+  .linkbtn:hover { background: none; color: var(--text); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  .msg { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 14px; display: none; }
+  .msg.show { display: block; }
+  .msg.ok { background: #16302a; border: 1px solid #2a5a47; }
+  .msg.err { background: #3a1f24; border: 1px solid #6b2d33; color: #ffb4a6; }
+  .msg button { margin-left: 10px; }
+
+  /* ---------- Benutzer ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 10px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td b { font-weight: 600; }
+  .role { color: var(--dim); margin-left: 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .tag { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); }
+  .tag.warn { color: var(--lamp); border-color: #7a5a2a; }
+  .tag.bad { color: var(--heat); border-color: #6b2d33; }
+  td.ops { text-align: right; white-space: nowrap; }
+  td.ops button { margin-left: 6px; padding: 5px 10px; font-size: 13px; }
+  tr.editrow td { border-top: none; padding-top: 0; }
+  .editor { background: var(--inset); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .editor label { font-size: 14px; }
+  .erow { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin-bottom: 12px; }
+  .erow select, .erow input[type=date] { width: auto; margin-left: 6px; }
+  input[type=date] {
+    padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: 14px var(--mono); color-scheme: dark;
+  }
+  input.small { width: 70px; display: inline-block; margin: 0 6px; }
+  .check { display: inline-flex; align-items: center; gap: 8px; }
+  .check input { width: 18px; height: 18px; }
+  .rhead { margin: 4px 0 8px; font-size: 13px; color: var(--dim); display: flex; gap: 14px; align-items: baseline; }
+  .rhead .linkbtn { font-size: 13px; color: var(--lamp); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 14px; margin-bottom: 14px; }
+  .dimtxt, .adminnote { color: var(--dim); font-size: 13px; }
+  .adminnote { margin: 0 0 12px; }
+  .pwform button { white-space: nowrap; }
+  .pwform { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .addform { display: grid; grid-template-columns: 1fr 1.4fr auto auto; gap: 8px; margin-top: 16px; }
+  @media (max-width: 560px) { .addform { grid-template-columns: 1fr 1fr; } }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15, 21, 36, .92); display: none;
+    place-items: center; font-size: 17px; z-index: 10;
+  }
+  .overlay.show { display: grid; }
+</style>
+</head>
+<body>
+<nav class="topbar" aria-label="Konto">
+  <a class="back" href="/">Zum Dashboard</a>
+  <span><span class="pre">Angemeldet als </span><b>{{NAME}}</b></span>
+  <button type="button" class="linkbtn" id="logoutBtn">Abmelden</button>
+</nav>
+
+<main>
+  <h1>Einstellungen</h1>
+
+  <div class="cols">
+    <section aria-labelledby="h-status">
+      <h2 id="h-status">Zustand</h2>
+      <p class="sub" id="updated">Wird geladen …</p>
+      <div id="status"></div>
+    </section>
+
+    <section aria-labelledby="h-cfg">
+      <h2 id="h-cfg">Konfiguration</h2>
+      <p class="sub">Änderungen gelten sofort. Werte mit dem Hinweis „wirkt nach Neustart“ brauchen einen Neustart der Pi-Anwendung.</p>
+      <form id="cfg" novalidate></form>
+      <div class="actions">
+        <button type="button" class="primary" id="saveBtn">Änderungen speichern</button>
+        <button type="button" id="resetBtn">Auf Werte aus config.py zurücksetzen</button>
+      </div>
+      <div class="msg" id="cfgMsg" role="status"></div>
+    </section>
+  </div>
+
+  <div class="cols">
+    <section aria-labelledby="h-users">
+      <h2 id="h-users">Benutzer</h2>
+      <p class="sub">Administratoren sehen diese Seite und dürfen alles. Bei Nutzern legst du fest, was sie schalten dürfen.</p>
+      <table><tbody id="users"></tbody></table>
+      <form class="addform" id="addForm" novalidate>
+        <input type="text" id="newName" placeholder="Benutzername" autocomplete="off" aria-label="Neuer Benutzername">
+        <input type="password" id="newPw" placeholder="Passwort (min. 8 Zeichen)" autocomplete="new-password" aria-label="Passwort für neuen Benutzer">
+        <select id="newRole" aria-label="Rolle"><option value="nutzer">Nutzer</option><option value="admin">Administrator</option></select>
+        <button type="submit">Benutzer anlegen</button>
+      </form>
+      <div class="msg" id="userMsg" role="status"></div>
+    </section>
+
+    <section aria-labelledby="h-tools">
+      <h2 id="h-tools">Werkzeuge</h2>
+      <p class="sub">Zum Prüfen vor der Vorführung.</p>
+      <div class="actions">
+        <button type="button" id="ttsBtn">Testsatz vorlesen</button>
+        <button type="button" id="histBtn">Gesprächsverlauf der KI leeren</button>
+        <button type="button" class="danger" id="restartBtn">Pi-Anwendung neu starten</button>
+      </div>
+      <div class="msg" id="toolMsg" role="status"></div>
+    </section>
+  </div>
+</main>
+
+<div class="overlay" id="overlay" role="alert">Die Pi-Anwendung startet neu …</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const num = (v, d = 1) => Number(v).toLocaleString("de-DE", { maximumFractionDigits: d });
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+  });
+  if (r.status === 401) { location.href = "/login"; throw new Error("Bitte neu anmelden."); }
+  if (r.status === 403) { location.href = "/"; throw new Error("Keine Berechtigung."); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Fehler ${r.status}`);
+  return data;
+}
+const post = (path, body = {}) => api(path, { method: "POST", body: JSON.stringify(body) });
+
+function show(el, text, ok = true, extra = "") {
+  el.className = "msg show " + (ok ? "ok" : "err");
+  el.innerHTML = esc(text) + extra;
+}
+
+function duration(s) {
+  if (s == null) return "–";
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d} Tg ${h} Std`;
+  if (h) return `${h} Std ${m} Min`;
+  return `${m} Min`;
+}
+
+$("logoutBtn").onclick = async () => { await post("/api/logout"); location.href = "/login"; };
+
+/* ==================== Zustand ==================== */
+
+function comp(title, level, state, rows, hints = []) {
+  const dl = rows.filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  const hs = hints.map(([t, cls]) => `<p class="hint ${cls || ""}">${esc(t)}</p>`).join("");
+  return `<div class="comp"><div class="comp-head"><span class="dot ${level}"></span>
+    <h3>${esc(title)}</h3><span class="state">${esc(state)}</span></div>
+    ${dl ? `<dl>${dl}</dl>` : ""}${hs}</div>`;
+}
+
+function signal(dbm) {
+  if (dbm == null) return null;
+  const q = dbm >= -60 ? "gut" : dbm >= -72 ? "mittel" : "schwach";
+  return `${dbm} dBm (${q})`;
+}
+
+const VOICE_STATES = { aus: "aus", bereit: "wartet auf das Wakeword", hoert_zu: "hört zu",
+  denkt: "denkt nach", spricht: "spricht", stumm: "stummgeschaltet" };
+
+function renderStatus(s) {
+  const p = s.pi, e = s.esp, o = s.ollama, t = s.stt;
+  const html = [];
+
+  const piHints = (p.probleme || []).map((x) => [x + " – prüfe das Netzteil bzw. die Kühlung.", "bad"]);
+  if (p.temperatur > 75) piHints.push(["Der Pi ist sehr warm.", ""]);
+  html.push(comp("Raspberry Pi", piHints.length ? "warn" : "ok", p.name, [
+    ["Adressen", Object.entries(p.ips || {}).map(([k, v]) => `${v} (${k})`).join(", ")],
+    ["Temperatur", p.temperatur != null ? `${num(p.temperatur)} °C` : null],
+    ["Auslastung", `${num(p.last, 2)} bei ${p.kerne} Kernen`],
+    ["Arbeitsspeicher", `${num(p.ram_frei_mb / 1024)} von ${num(p.ram_mb / 1024)} GB frei`],
+    ["Speicherplatz", `${num(p.speicher_frei_gb)} von ${num(p.speicher_gb)} GB frei`],
+    ["Pi läuft seit", duration(p.laufzeit_s)],
+    ["Anwendung läuft seit", duration(p.app_laufzeit_s)],
+  ], piHints));
+
+  html.push(e.online
+    ? comp("Haus (ESP)", "ok", "verbunden", [
+        ["Adresse", e.adresse], ["Antwortzeit", `${e.antwortzeit_ms} ms`],
+        ["Läuft seit", duration(e.laufzeit_s)], ["WLAN-Empfang", signal(e.wlan_dbm)],
+        ["Temperatur", e.sensoren?.temperature != null ? `${num(e.sensoren.temperature)} °C` : "kein Messwert"],
+        ["Luftfeuchte", e.sensoren?.humidity != null ? `${num(e.sensoren.humidity, 0)} %` : "kein Messwert"],
+      ])
+    : comp("Haus (ESP)", "bad", "nicht erreichbar", [["Adresse", e.adresse]],
+        [["Prüfe, ob der ESP Strom hat, im WLAN ist und die Adresse stimmt.", "bad"]]));
+
+  html.push(o.online
+    ? comp("KI-Server", o.modell_vorhanden ? "ok" : "warn", "verbunden", [
+        ["Adresse", o.adresse], ["Antwortzeit", `${o.antwortzeit_ms} ms`],
+        ["Sprachmodell", o.modell], ["Auf dem Server", (o.modelle || []).join(", ") || "keine Modelle"],
+      ], o.modell_vorhanden ? [] : [[`Das Modell fehlt auf dem Server. Dort ausführen: ollama pull ${o.modell}`, ""]])
+    : comp("KI-Server", "bad", "nicht erreichbar", [["Adresse", o.adresse]],
+        [["Prüfe, ob der Server läuft und die Verbindung (Tailscale bzw. HTTPS) steht.", "bad"]]));
+
+  html.push(t.online
+    ? comp("Spracherkennung", "ok", "verbunden", [
+        ["Adresse", t.adresse], ["Antwortzeit", t.antwortzeit_ms != null ? `${t.antwortzeit_ms} ms` : null],
+        ["Modell", t.modell], ["Rechnet auf", t.geraet === "cuda" ? "Grafikkarte" : "Prozessor"],
+      ])
+    : comp("Spracherkennung", "bad", "nicht erreichbar", [["Adresse", t.adresse]],
+        [["Prüfe, ob der Dienst hausmesse-stt auf dem Server läuft.", "bad"]]));
+
+  const tts = s.tts;
+  html.push(comp("Sprachausgabe", !tts.aktiv ? "" : tts.bereit ? "ok" : "warn",
+    !tts.aktiv ? "aus" : tts.bereit ? "bereit" : "Stimme wird geladen", []));
+
+  const v = s.sprache;
+  html.push(comp("Sprachsteuerung", !v.aktiv || v.status === "aus" ? "" : v.stumm ? "warn" : "ok",
+    v.aktiv ? (VOICE_STATES[v.status] || v.status) : "aus", [
+      ["Wakeword", v.wakeword], ["Zuletzt gehört", v.frage], ["Zuletzt geantwortet", v.antwort],
+    ]));
+
+  $("status").innerHTML = html.join("");
+  $("updated").textContent = "Aktualisiert um " + new Date().toLocaleTimeString("de-DE");
+}
+
+let statusBusy = false;
+async function loadStatus() {
+  if (statusBusy) return;
+  statusBusy = true;
+  try { renderStatus(await api("/api/admin/status")); }
+  catch (err) { $("updated").textContent = "Zustand konnte nicht geladen werden: " + err.message; }
+  finally { statusBusy = false; }
+}
+
+/* ==================== Einstellungen ==================== */
+
+let fields = [];
+
+function fieldHtml(f) {
+  const id = "f_" + f.key;
+  let input;
+  if (f.type === "bool") {
+    input = `<input type="checkbox" id="${id}" ${f.value ? "checked" : ""}>`;
+  } else if (f.type === "select") {
+    input = `<select id="${id}">${f.options.map((o) =>
+      `<option ${o === f.value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  } else if (f.type === "int" || f.type === "float") {
+    input = `<input type="number" id="${id}" value="${esc(f.value)}" min="${f.min}" max="${f.max}"
+      step="${f.type === "int" ? 1 : f.step}" inputmode="decimal">`;
+  } else {
+    input = `<input type="text" id="${id}" value="${esc(f.value)}" spellcheck="false" autocomplete="off">`;
+  }
+  const meta = [f.changed ? "im Browser geändert" : "", f.restart ? "wirkt nach Neustart" : ""].filter(Boolean);
+  return `<div class="field"><label for="${id}">${esc(f.label)}
+    ${meta.length ? `<span class="meta${f.changed ? " changed" : ""}">${esc(meta.join(", "))}</span>` : ""}
+    </label>${input}</div>`;
+}
+
+function renderConfig() {
+  const groups = [...new Set(fields.map((f) => f.group))];
+  $("cfg").innerHTML = groups.map((g) => `<fieldset><legend>${esc(g)}</legend>
+    ${fields.filter((f) => f.group === g).map(fieldHtml).join("")}</fieldset>`).join("");
+}
+
+async function loadConfig() {
+  fields = (await api("/api/admin/config")).felder;
+  renderConfig();
+}
+
+function readValue(f) {
+  const el = $("f_" + f.key);
+  if (f.type === "bool") return el.checked;
+  if (f.type === "int" || f.type === "float") return el.value === "" ? null : Number(el.value);
+  return el.value.trim();
+}
+
+const restartBtnHtml = ' <button type="button" class="primary" onclick="restartApp()">Jetzt neu starten</button>';
+
+$("saveBtn").onclick = async () => {
+  const werte = {};
+  for (const f of fields) {
+    const v = readValue(f);
+    if (v !== f.value) werte[f.key] = v;              // nur Geändertes schicken
+  }
+  if (!Object.keys(werte).length) return show($("cfgMsg"), "Es gibt keine Änderungen zum Speichern.");
+  $("saveBtn").disabled = true;
+  try {
+    const r = await post("/api/admin/config", { werte });
+    await loadConfig();
+    if (r.neustart.length) {
+      show($("cfgMsg"), `Gespeichert. Damit „${r.neustart.join("“, „")}“ wirkt, starte die Pi-Anwendung neu.`, true, restartBtnHtml);
+    } else {
+      show($("cfgMsg"), "Gespeichert und sofort aktiv.");
+    }
+    loadStatus();
+  } catch (err) {
+    show($("cfgMsg"), err.message, false);
+  } finally {
+    $("saveBtn").disabled = false;
+  }
+};
+
+$("resetBtn").onclick = async () => {
+  if (!confirm("Alle im Browser geänderten Einstellungen verwerfen und wieder die Werte aus config.py verwenden?")) return;
+  try {
+    await post("/api/admin/config/reset");
+    await loadConfig();
+    show($("cfgMsg"), "Zurückgesetzt. Starte die Pi-Anwendung neu, damit alles wieder die Werte aus config.py nutzt.", true, restartBtnHtml);
+  } catch (err) { show($("cfgMsg"), err.message, false); }
+};
+
+/* ==================== Benutzer ==================== */
+
+let me = "", ziele = [], users = [];
+
+function summary(u) {
+  const parts = [];
+  if (u.gesperrt) parts.push(["gesperrt", "bad"]);
+  else if (u.abgelaufen) parts.push(["abgelaufen", "bad"]);
+  else if (u.gueltig_bis) parts.push(["bis " + new Date(u.gueltig_bis).toLocaleDateString("de-DE"), "warn"]);
+  if (u.rolle === "nutzer") {
+    const n = u.rechte.ziele.length;
+    parts.push([n === ziele.length ? "alle Geräte" : n === 0 ? "nur ansehen" : `${n} von ${ziele.length} Geräten`, ""]);
+    if (!u.rechte.chat) parts.push(["ohne KI-Chat", ""]);
+    if (u.rechte.pro_minute) parts.push([`höchstens ${u.rechte.pro_minute} pro Minute`, ""]);
+  }
+  return parts.map(([t, c]) => `<span class="tag ${c}">${esc(t)}</span>`).join("");
+}
+
+function editor(u) {
+  const self = u.name === me, r = u.rechte;
+  const boxes = ziele.map((z) => `<label class="check"><input type="checkbox" data-ziel="${esc(z.key)}"
+      ${r.ziele.includes(z.key) ? "checked" : ""}> ${esc(z.label)}</label>`).join("");
+  return `<form class="editor" data-edit="${esc(u.name)}" novalidate>
+    <div class="erow">
+      <label>Rolle <select name="rolle" ${self ? "disabled" : ""}>
+        <option value="nutzer" ${u.rolle === "nutzer" ? "selected" : ""}>Nutzer</option>
+        <option value="admin" ${u.rolle === "admin" ? "selected" : ""}>Administrator</option></select></label>
+      <label>Gültig bis <input type="date" name="gueltig_bis" value="${esc(u.gueltig_bis)}"></label>
+      <label class="check"><input type="checkbox" name="gesperrt" ${u.gesperrt ? "checked" : ""} ${self ? "disabled" : ""}>
+        Konto gesperrt</label>
+    </div>
+    <div class="rights" ${u.rolle === "admin" ? "hidden" : ""}>
+      <p class="rhead">Darf schalten
+        <button type="button" class="linkbtn" data-preset="alle">Alles</button>
+        <button type="button" class="linkbtn" data-preset="keins">Nichts (nur ansehen)</button></p>
+      <div class="grid">${boxes}</div>
+      <div class="erow">
+        <label class="check"><input type="checkbox" name="chat" ${r.chat ? "checked" : ""}> Darf mit der KI schreiben</label>
+        <label>Höchstens <input type="number" name="pro_minute" min="0" max="60" value="${r.pro_minute}" class="small">
+          Aktionen pro Minute <span class="dimtxt">(0 = unbegrenzt)</span></label>
+      </div>
+    </div>
+    <p class="adminnote" ${u.rolle === "admin" ? "" : "hidden"}>Administratoren dürfen immer alles.</p>
+    <div class="actions"><button type="submit" class="primary">Änderungen speichern</button></div>
+    <div class="pwform">
+      <input type="password" name="pw" placeholder="Neues Passwort (min. 8 Zeichen)" autocomplete="new-password"
+        aria-label="Neues Passwort für ${esc(u.name)}">
+      <button type="button" data-setpw="${esc(u.name)}">Passwort ändern</button>
+    </div>
+  </form>`;
+}
+
+async function loadUsers(openName) {
+  const d = await api("/api/admin/users");
+  me = d.ich; ziele = d.ziele; users = d.benutzer;
+  $("users").innerHTML = users.map((u) => `
+    <tr><td><b>${esc(u.name)}</b>${u.name === me ? " (du)" : ""}
+        <span class="role">${u.rolle === "admin" ? "Administrator" : "Nutzer"}</span>
+        <div class="tags">${summary(u)}</div></td>
+      <td class="ops">
+        <button type="button" data-open="${esc(u.name)}" aria-expanded="false">Bearbeiten</button>
+        ${u.name === me ? "" : `<button type="button" class="danger" data-del="${esc(u.name)}">Löschen</button>`}
+      </td></tr>
+    <tr class="editrow" id="ed_${esc(u.name)}" hidden><td colspan="2">${editor(u)}</td></tr>`).join("");
+  if (openName && $("ed_" + openName)) toggleEditor(openName, true);
+}
+
+function toggleEditor(name, open) {
+  const row = $("ed_" + name);
+  row.hidden = open === undefined ? !row.hidden : !open;
+  document.querySelector(`[data-open="${CSS.escape(name)}"]`).setAttribute("aria-expanded", String(!row.hidden));
+}
+
+$("users").addEventListener("click", async (e) => {
+  const t = e.target;
+  if (t.dataset.open) toggleEditor(t.dataset.open);
+  if (t.dataset.preset) {
+    t.closest("form").querySelectorAll("[data-ziel]").forEach((c) => c.checked = t.dataset.preset === "alle");
+  }
+  if (t.dataset.setpw) {
+    const name = t.dataset.setpw, input = t.closest("form").elements.pw;
+    try {
+      await post(`/api/admin/users/${encodeURIComponent(name)}/passwort`, { passwort: input.value });
+      input.value = "";
+      show($("userMsg"), name === me ? "Dein Passwort wurde geändert."
+        : `Passwort von „${name}“ geändert. Er muss sich neu anmelden.`);
+    } catch (err) { show($("userMsg"), err.message, false); input.focus(); }
+  }
+  if (t.dataset.del && confirm(`Benutzer „${t.dataset.del}“ wirklich löschen? Er wird sofort abgemeldet.`)) {
+    try {
+      await api("/api/admin/users/" + encodeURIComponent(t.dataset.del), { method: "DELETE" });
+      show($("userMsg"), `„${t.dataset.del}“ wurde gelöscht.`);
+      loadUsers();
+    } catch (err) { show($("userMsg"), err.message, false); }
+  }
+});
+
+// Enter im Passwortfeld aendert das Passwort (statt die Rechte zu speichern)
+$("users").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.name === "pw") {
+    e.preventDefault();
+    e.target.closest("form").querySelector("[data-setpw]").click();
+  }
+});
+
+// Rolle umschalten -> Rechte-Bereich ein- oder ausblenden
+$("users").addEventListener("change", (e) => {
+  if (e.target.name !== "rolle") return;
+  const f = e.target.closest("form"), admin = e.target.value === "admin";
+  f.querySelector(".rights").hidden = admin;
+  f.querySelector(".adminnote").hidden = !admin;
+});
+
+$("users").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, name = f.dataset.edit, el = f.elements;
+  const body = {
+    rolle: el.rolle.value,
+    gueltig_bis: el.gueltig_bis.value,
+    gesperrt: el.gesperrt.checked,
+    rechte: {
+      ziele: [...f.querySelectorAll("[data-ziel]:checked")].map((c) => c.dataset.ziel),
+      chat: el.chat.checked,
+      pro_minute: Number(el.pro_minute.value || 0),
+    },
+  };
+  if (name === me) { delete body.rolle; delete body.gesperrt; }
+  try {
+    await post(`/api/admin/users/${encodeURIComponent(name)}`, body);
+    show($("userMsg"), body.gesperrt ? `„${name}“ ist gesperrt und wurde abgemeldet.` : `Änderungen für „${name}“ gespeichert.`);
+    loadUsers(name);
+  } catch (err) { show($("userMsg"), err.message, false); }
+});
+
+$("addForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("newName").value.trim().toLowerCase();
+  try {
+    await post("/api/admin/users", { name, passwort: $("newPw").value, rolle: $("newRole").value });
+    show($("userMsg"), `„${name}“ wurde angelegt. Unter „Bearbeiten“ kannst du die Rechte einschränken.`);
+    e.target.reset();
+    loadUsers(name);
+  } catch (err) { show($("userMsg"), err.message, false); }
+});
+
+/* ==================== Werkzeuge ==================== */
+
+$("ttsBtn").onclick = async () => {
+  try { await post("/api/admin/tts-test"); show($("toolMsg"), "Der Testsatz wird vorgelesen."); }
+  catch (err) { show($("toolMsg"), err.message, false); }
+};
+
+$("histBtn").onclick = async () => {
+  try { await post("/api/chat/reset"); show($("toolMsg"), "Der Gesprächsverlauf ist geleert."); }
+  catch (err) { show($("toolMsg"), err.message, false); }
+};
+
+async function restartApp() {
+  if (!confirm("Pi-Anwendung jetzt neu starten? Sprachsteuerung und Dashboard sind dabei kurz nicht erreichbar.")) return;
+  try { await post("/api/admin/restart"); } catch (err) { return show($("toolMsg"), err.message, false); }
+  $("overlay").classList.add("show");
+  await new Promise((r) => setTimeout(r, 3000));
+  for (let i = 0; i < 60; i++) {                      // bis zu 2 Minuten warten
+    try {
+      const r = await fetch("/api/admin/config", { headers: { "Content-Type": "application/json" } });
+      if (r.ok) return location.reload();
+    } catch (_) { /* startet noch */ }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  $("overlay").textContent = "Die Pi-Anwendung meldet sich nicht zurück. Prüfe das Terminal auf dem Pi.";
+}
+$("restartBtn").onclick = restartApp;
+
+/* ==================== Start ==================== */
+
+loadStatus();
+loadConfig().catch((err) => show($("cfgMsg"), err.message, false));
+loadUsers().catch((err) => show($("userMsg"), err.message, false));
+setInterval(loadStatus, 8000);
+</script>
+</body>
+</html>

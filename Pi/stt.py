@@ -66,8 +66,9 @@ def transcribe(pcm):
                                               condition_on_previous_text=False)
         text = " ".join(s.text for s in segments if s.no_speech_prob < 0.6).strip()
     else:
-        r = requests.post(config.STT_URL, data=pcm_to_wav(pcm),
-                          headers={"Content-Type": "audio/wav"}, timeout=30)
+        args = config.server_args()
+        args["headers"] = {**args.get("headers", {}), "Content-Type": "audio/wav"}
+        r = requests.post(config.STT_URL, data=pcm_to_wav(pcm), timeout=30, **args)
         r.raise_for_status()
         text = r.json().get("text", "").strip()
     print(f"[STT] ({time.time() - start:.1f} s) '{text}'")

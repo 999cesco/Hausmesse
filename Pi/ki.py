@@ -353,14 +353,15 @@ def _ask_model(user_text, state):
         "stream": False,
         "keep_alive": "30m",                  # Modell im Speicher halten -> schnellere Antworten
         "options": {"temperature": 0.2, "num_ctx": 8192},  # genug Kontext fuer Prompt + Verlauf
-    }, timeout=120)
+    }, timeout=120, **config.server_args())
     r.raise_for_status()
     raw = r.json()["message"]["content"]
     return raw, json.loads(raw)
 
 
-def handle(user_text):
-    """Hauptfunktion: Text rein -> Antwort + ausgefuehrte Befehle raus."""
+def handle(user_text, pruefen=None):
+    """Hauptfunktion: Text rein -> Antwort + ausgefuehrte Befehle raus.
+    pruefen: optionale Rechte-Pruefung fuer den angemeldeten Nutzer (siehe rechte.filter_for)."""
     with _lock:
         try:
             state = get_state()
@@ -383,6 +384,11 @@ def handle(user_text):
             else:
                 ignored.append(c)
 
+        # Rechte des Nutzers: Verbotenes wird nicht ausgefuehrt
+        denied, deny_msg = [], ""
+        if pruefen and commands:
+            commands, denied, deny_msg = pruefen(commands)
+
         esp_result = None
         if commands:
             try:
@@ -392,8 +398,13 @@ def handle(user_text):
 
         antwort = result.get("antwort", "")
         rueckfrage = bool(result.get("rueckfrage", False))
+        # Nichts davon durfte der Nutzer -> ehrlich sagen statt die KI-Antwort vorzulesen
+        if denied and not commands:
+            rest = antwort if result.get("art") == "gemischt" else ""
+            antwort = f"{deny_msg} {rest}".strip()
+            rueckfrage = False
         # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
-        if ignored and not commands:
+        elif ignored and not commands:
             hinweis = "Das Schalten konnte ich leider nicht ausführen."
             # Bei reinen Befehlen bleibt nur der Hinweis, sonst den Rest der Antwort behalten
             antwort = hinweis if result.get("art") == "befehl" or not antwort else f"{hinweis} {antwort}"
@@ -403,13 +414,16 @@ def handle(user_text):
             rueckfrage = False
         elif result.get("art") == "gemischt" and commands and not result.get("szene"):
             antwort = (confirm(commands) + " " + antwort).strip()   # Bestaetigung + Rest der Antwort
+        if denied and commands and deny_msg:
+            antwort = f"{antwort} {deny_msg}".strip()
         if esp_result and esp_result.get("status") == "error":
             antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
 
         # Alles im Terminal ausgeben -> Fehlersuche wird einfach
         print(f"[KI] Nutzer:   {user_text}")
         print(f"[KI] Modell:   {raw}")
-        print(f"[KI] Befehle:  {commands}" + (f"  IGNORIERT: {ignored}" if ignored else ""))
+        print(f"[KI] Befehle:  {commands}" + (f"  IGNORIERT: {ignored}" if ignored else "")
+              + (f"  NICHT ERLAUBT: {denied}" if denied else ""))
         print(f"[KI] ESP:      {esp_result}")
 
         # Verlauf merken (ohne den langen Zustand), damit Rueckfragen wie "ja" funktionieren

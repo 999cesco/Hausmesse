@@ -1,0 +1,29 @@
+# HTTPS-Zugang zum KI-Server fuer den Pi.
+# Ollama und Whisper lauschen nur auf 127.0.0.1 - von aussen kommt man nur hier durch,
+# und nur mit dem richtigen Schluessel im Header "X-API-Key".
+#
+# SERVERADRESSE ersetzen durch:
+#   - einen Domainnamen (z. B. hausmesse.deinefirma.de) -> echtes Zertifikat von Let's Encrypt
+#   - ODER die oeffentliche IP des Servers               -> dann die Zeile "tls internal" einkommentieren
+# SCHLUESSEL wird bei der Einrichtung per sed ersetzt (nie ins Repo schreiben!).
+
+SERVERADRESSE {
+	# tls internal
+
+	@mitSchluessel header X-API-Key SCHLUESSEL
+	handle @mitSchluessel {
+		handle_path /ollama/* {
+			reverse_proxy 127.0.0.1:11434 {
+				# Ollama akzeptiert nur Anfragen, die an "localhost" adressiert sind
+				header_up Host localhost:11434
+			}
+		}
+		handle_path /stt/* {
+			reverse_proxy 127.0.0.1:9000
+		}
+		respond 404
+	}
+
+	# Alles ohne den richtigen Schluessel wird abgewiesen
+	respond 401
+}

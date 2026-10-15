@@ -21,6 +21,7 @@
     --sans: system-ui, "Segoe UI", "DejaVu Sans", sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.5 var(--sans);
@@ -31,6 +32,19 @@
     align-items: start;
   }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px; } }
+
+  /* Kopfzeile mit Anmeldung (wird vom Server eingesetzt) */
+  .topbar {
+    max-width: 1400px; margin: 0 auto; padding: 12px 20px 0;
+    display: flex; justify-content: flex-end; align-items: center; gap: 18px;
+    font-size: 14px; color: var(--dim);
+  }
+  .topbar .who { margin-right: auto; }
+  .topbar b { color: var(--text); font-weight: 600; }
+  @media (max-width: 560px) { .topbar .pre { display: none; } }
+  .topbar a.linkbtn { text-decoration: none; }
+  .topbar a.linkbtn:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
+  @media (max-width: 900px) { .topbar { padding: 10px 12px 0; } }
 
   .banner {
     display: none; grid-column: 1 / -1; padding: 10px 14px; border-radius: 8px;
@@ -98,6 +112,15 @@
   button.primary { background: var(--lamp); color: #1b1608; border-color: var(--lamp); font-weight: 600; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
   button:disabled { opacity: .5; cursor: wait; }
+  /* Fehlende Rechte */
+  .nope:disabled, .nope { cursor: not-allowed; opacity: .4; }
+  .lamp.nope { opacity: .45; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20;
+    max-width: min(92vw, 460px); padding: 10px 16px; border-radius: 10px; font-size: 14px;
+    background: #3a1f24; border: 1px solid #6b2d33; color: #ffb4a6; display: none;
+  }
+  .toast.show { display: block; }
   .linkbtn { background: none; border: none; color: var(--dim); padding: 0; font-size: 13px; }
   .linkbtn:hover { background: none; color: var(--text); }
   .chat-head { display: flex; justify-content: space-between; align-items: baseline; }
@@ -114,6 +137,7 @@
 </style>
 </head>
 <body>
+<!--TOPBAR-->
 <main>
   <div class="banner" id="banner">
     Das Haus ist nicht erreichbar. Prüfe, ob der ESP Strom hat und im WLAN ist, und ob die IP in config.py stimmt.
@@ -219,7 +243,7 @@
       </form>
     </section>
 
-    <section>
+    <section id="controlSec">
       <h2>Steuerung</h2>
       <h3>Licht</h3>
       <div id="lightControls"></div>
@@ -254,8 +278,14 @@
     </section>
   </aside>
 </main>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
+const RIGHTS = window.RECHTE || null;      // null = darf alles
+const can = (ziel) => !RIGHTS || RIGHTS.ziele.includes(ziel);
+const TARGET = { light: c => "licht:" + c.room, climate: () => "klima", fan: () => "luefter",
+  garage: () => "garage", buzzer: () => "garage", window: () => "fenster" };
+
 const ROOMS = {
   schlafzimmer:  { name: "Schlafzimmer",  x: 60,  y: 170, w: 175, h: 110, lx: 176 },
   arbeitszimmer: { name: "Arbeitszimmer", x: 235, y: 170, w: 175, h: 110, lx: 362 },
@@ -409,6 +439,7 @@ function render(s) {
     b.textContent = ROOMS[id].name + (open ? " offen" : " zu");
     b.classList.toggle("active", open);
     b.onclick = () => sendCommands([{ device: "window", room: id, action: open ? "close" : "open" }]);
+    if (!can("fenster")) { b.disabled = true; b.classList.add("nope"); }
     $("windowSeg").appendChild(b);
   }
 
@@ -447,12 +478,23 @@ async function refresh() {
 }
 
 async function sendCommands(commands) {
+  commands = commands.filter(c => can(TARGET[c.device]?.(c)));
+  if (!commands.length) return toast("Dafür hast du keine Berechtigung.");
   try {
-    await fetch("/api/command", {
+    const r = await fetch("/api/command", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commands }),
     });
+    if (!r.ok) toast((await r.json().catch(() => ({}))).error || "Der Befehl wurde nicht ausgeführt.");
   } finally { refresh(); }
+}
+
+let toastTimer;
+function toast(text) {
+  $("toast").textContent = text;
+  $("toast").classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 3500);
 }
 
 // ---------- Chat ----------
@@ -495,7 +537,7 @@ $("chatForm").addEventListener("submit", async e => {
     });
     const d = await r.json();
     wait.remove();
-    addMsg(d.antwort || "(keine Antwort)", "bot", d.befehle);
+    addMsg(d.antwort || d.error || "(keine Antwort)", "bot", d.befehle);
   } catch {
     wait.remove();
     addMsg("Der Pi antwortet nicht. Läuft app.py noch?", "bot");
@@ -507,12 +549,34 @@ $("chatForm").addEventListener("submit", async e => {
 });
 
 $("resetChat").addEventListener("click", async () => {
-  await fetch("/api/chat/reset", { method: "POST" });
+  await fetch("/api/chat/reset", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  });
   $("log").innerHTML = '<p class="empty">Verlauf geleert. Das Haus hat die vorherigen Nachrichten vergessen.</p>';
 });
 
+// ---------- Rechte (nur Anzeige - der Pi prueft jeden Befehl selbst) ----------
+function applyRights() {
+  if (!RIGHTS) return;
+  if (!RIGHTS.chat) document.querySelector("section.chat").hidden = true;
+  if (!RIGHTS.ziele.length) $("controlSec").hidden = true;      // nur ansehen
+  const lock = (elem) => { elem.disabled = true; elem.classList.add("nope"); };
+  for (const id of Object.keys(ROOMS)) {
+    if (can("licht:" + id)) continue;
+    lock($("sl-" + id));
+    const lamp = $("lamp-" + id).parentNode;
+    lamp.classList.add("nope");
+    lamp.setAttribute("tabindex", "-1");
+    lamp.setAttribute("aria-disabled", "true");
+  }
+  if (!can("klima")) [...$("climateSeg").children, $("tempDown"), $("tempUp")].forEach(lock);
+  if (!can("luefter")) [...$("fanSeg").children].forEach(lock);
+  if (!can("garage")) lock($("garageBtn"));
+}
+
 buildHouse();
 buildControls();
+applyRights();
 refresh();
 setInterval(refresh, 2000);
 </script>

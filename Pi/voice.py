@@ -191,6 +191,11 @@ def _loop():
     from openwakeword.model import Model
 
     stt.load()
+    try:                                       # fehlt das Wakeword-Modell, wird es geladen
+        import openwakeword.utils
+        openwakeword.utils.download_models([config.WAKEWORD])
+    except Exception as e:
+        print(f"[VOICE] Wakeword-Modell konnte nicht geladen werden: {e}")
     model = Model(wakeword_models=[config.WAKEWORD], inference_framework="onnx")
     vad = webrtcvad.Vad(config.VAD_LEVEL)
     threading.Thread(target=_mic_reader, daemon=True).start()

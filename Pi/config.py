@@ -1,8 +1,38 @@
 # Einstellungen fuer den Smarthome-Pi - hier die eigenen Werte eintragen
 
 ESP_IP = "192.168.0.103"                              # IP des ESP32 (Serieller Monitor)
-OLLAMA_URL = "http://192.168.0.105:11434/api/chat"    # IP des KI-Servers (zurzeit Laptop)
 MODEL = "llama3.1:8b"                                 # exakter Name aus "ollama list"
+
+# ---- KI-Server ----
+# Laptop im selben WLAN (Plan B):
+#   OLLAMA_URL = "http://192.168.0.105:11434/api/chat"
+#   STT_URL    = "http://192.168.0.105:9000/transcribe"
+# Firmenserver ueber HTTPS (Caddy):
+#   OLLAMA_URL = "https://SERVERADRESSE/ollama/api/chat"
+#   STT_URL    = "https://SERVERADRESSE/stt/transcribe"
+OLLAMA_URL = "http://192.168.0.105:11434/api/chat"
+STT_URL = "http://192.168.0.105:9000/transcribe"
+
+# Nur fuer HTTPS ohne eigene Domain: Pfad zum Zertifikat des Servers, sonst leer lassen
+SERVER_CA = ""            # z. B. "/home/admin/Hausmesse/Pi/server_ca.crt"
+
+# Der Schluessel steht NICHT hier (das Repo ist oeffentlich), sondern in geheim.py:
+#   API_KEY = "..."
+# geheim.py wird von Git ignoriert und muss auf dem Pi von Hand angelegt werden.
+try:
+    from geheim import API_KEY
+except ImportError:
+    API_KEY = ""
+
+
+def server_args():
+    """Zusatzangaben fuer jede Anfrage an den KI-Server (Schluessel + Zertifikat)."""
+    args = {}
+    if API_KEY:
+        args["headers"] = {"X-API-Key": API_KEY}
+    if SERVER_CA:
+        args["verify"] = SERVER_CA
+    return args
 
 WEB_PORT = 5000          # Dashboard: http://<Pi-IP>:5000
 HISTORY_MESSAGES = 6     # wie viele vorherige Nachrichten die KI sieht (fuer Rueckfragen)
@@ -25,5 +55,20 @@ MAX_RECORD_MS = 12000                   # laengste Aufnahme
 MAX_FOLLOWUPS = 2                       # wie oft nach einer Rueckfrage ohne Wakeword weitergehoert wird
 
 STT_MODE = "server"                     # "server" oder "local" (Whisper direkt auf dem Pi)
-STT_URL = "http://192.168.0.105:9000/transcribe"    # stt_server.py auf dem KI-Server
 STT_LOCAL_MODEL = "base"                # nur fuer "local": tiny / base / small
+
+
+# ---- Einstellungen aus dem Admin-Bereich ----
+# Was im Browser unter "Einstellungen" geaendert wird, steht in einstellungen.json
+# (von Git ignoriert) und ueberschreibt die Werte oben.
+import json as _json
+import os as _os
+
+try:
+    with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "einstellungen.json"),
+              encoding="utf-8") as _f:
+        for _k, _v in _json.load(_f).items():
+            if _k.isupper() and _k in globals() and _k != "API_KEY":
+                globals()[_k] = _v
+except (FileNotFoundError, ValueError):
+    pass

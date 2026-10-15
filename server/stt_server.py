@@ -5,11 +5,15 @@ Der Pi schickt eine WAV-Aufnahme an  POST http://<Server>:9000/transcribe
 und bekommt  {"text": "..."}  zurueck.
 
 Installation:  pip install faster-whisper flask
-Start:         python stt_server.py
+Start:         python stt_server.py   (auf dem Linux-Server: ./start_stt.sh bzw. als Dienst)
 Beim ersten Start wird das Whisper-Modell einmalig heruntergeladen.
+
+Einstellungen koennen auch per Umgebungsvariable gesetzt werden (fuer den Dienst):
+  STT_MODEL, STT_DEVICE, STT_COMPUTE, STT_HOST, STT_PORT
 """
 
 import io
+import os
 import time
 import wave
 
@@ -17,10 +21,12 @@ import numpy as np
 from faster_whisper import WhisperModel
 from flask import Flask, jsonify, request
 
-MODEL = "small"     # tiny / base / small / medium - groesser = genauer, aber langsamer
-DEVICE = "cpu"      # "cpu" oder "cuda" (NVIDIA-Grafikkarte, braucht installierte CUDA-12-Bibliotheken)
-COMPUTE = "int8"    # bei "cuda" besser "float16"
-PORT = 9000
+# tiny / base / small / medium / large-v3-turbo - groesser = genauer, aber langsamer
+MODEL = os.environ.get("STT_MODEL", "small")
+DEVICE = os.environ.get("STT_DEVICE", "cpu")      # "cpu" oder "cuda" (NVIDIA-Grafikkarte)
+COMPUTE = os.environ.get("STT_COMPUTE", "int8")   # bei "cuda" besser "float16"
+HOST = os.environ.get("STT_HOST", "0.0.0.0")      # auf dem Server: nur die Tailscale-IP
+PORT = int(os.environ.get("STT_PORT", "9000"))
 
 print(f"Lade Whisper-Modell '{MODEL}' ...")
 start = time.time()
@@ -32,7 +38,7 @@ app = Flask(__name__)
 
 @app.get("/")
 def info():
-    return jsonify({"dienst": "stt", "modell": MODEL})
+    return jsonify({"dienst": "stt", "modell": MODEL, "geraet": DEVICE})
 
 
 @app.post("/transcribe")
@@ -52,4 +58,4 @@ def transcribe():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, threaded=False)
+    app.run(host=HOST, port=PORT, threaded=False)
