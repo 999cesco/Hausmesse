@@ -305,6 +305,7 @@ void handleState() {
   JsonDocument doc;
   doc["deviceId"] = deviceId;
   doc["uptimeMs"] = millis();
+  doc["rssi"] = WiFi.RSSI();               // WLAN-Empfang fuer den Admin-Bereich
 
   JsonObject sensors = doc["sensors"].to<JsonObject>();
   if (isnan(lastTemperature)) sensors["temperature"] = nullptr;
