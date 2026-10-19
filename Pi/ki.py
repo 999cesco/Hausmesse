@@ -9,6 +9,7 @@ Aufgabenteilung:
 """
 
 import json
+import re
 import threading
 from collections import deque
 from datetime import datetime
@@ -45,6 +46,14 @@ SCENES = {
     ],
 }
 
+# Was das Haus bei einer Szene ansagt (vom Code, damit es immer stimmt)
+SCENE_TEXT = {
+    "gute_nacht": "Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt "
+                  "und die Heizung auf 18 Grad gestellt.",
+    "guten_morgen": "Ich habe Licht im Schlafzimmer und in der Küche gemacht und heize auf 21 Grad.",
+    "alles_aus": "Ich habe alle Lichter, die Heizung, die Klimaanlage und den Lüfter ausgeschaltet.",
+}
+
 SYSTEM_PROMPT = """Du bist "Haus", der freundliche Sprachassistent eines Smarthome-Modellhauses.
 Du verstehst normale Sätze, denkst mit und handelst selbstständig.
 
@@ -73,10 +82,10 @@ Sonst "szene": "".
 
 ART DER ANFRAGE (Feld "art") - entscheide das ZUERST:
 befehl      = der Nutzer will etwas Bestimmtes schalten ("Licht in der Küche an", "Garage öffnen",
-              "Heizung auf 22 Grad"). Antworte NUR mit einer kurzen Bestätigung, z. B.
-              "Das Licht in der Küche ist an." KEINE anderen Räume, KEINE Werte, KEINE Hinweise.
-statusfrage = der Nutzer fragt nach einem Zustand ("Wie warm ist es?", "Ist die Garage zu?").
-              Nenne NUR genau das, wonach gefragt wurde.
+              "Heizung auf 22 Grad"). "antwort" bleibt leer.
+statusfrage = der Nutzer fragt nach einem Zustand ("Wie warm ist es?", "Ist die Garage zu?",
+              "Muss ich gießen?", "Ist das nicht zu wenig?"). Nenne NUR genau das, wonach
+              gefragt wurde. Bei einer Statusfrage schaltest du NIE etwas.
 situation   = der Nutzer beschreibt eine Lage oder ein Vorhaben ("Mir ist kalt", "Ich gehe ins Bett",
               "Ich gehe aus dem Haus"). NUR hier darfst du mitdenken und passende HINWEISE nennen
               (offene Fenster, offenes Garagentor).
@@ -86,9 +95,10 @@ gemischt    = der Satz hat MEHRERE Teile, z. B. etwas schalten UND etwas fragen
               ("Mach das Licht an und sag mir, wie warm es ist"). Erledige dann ALLE Teile:
               Befehle in "befehle", und in "antwort" NUR die übrigen Teile (Werte, Wissen).
 
-Bei "befehl" und "gemischt" bestätigt das System die Befehle automatisch.
-Schreib dann in "antwort" NICHTS über das Schalten ("Ich habe das Licht angemacht" weglassen).
-Bei "befehl" bleibt "antwort" deshalb leer: "".
+WAS DU SCHALTEST, SAGT DAS SYSTEM SELBST AN.
+Schreib in "antwort" NIE, was du einschaltest, ausschaltest oder einstellst
+("Ich schalte das Licht ein", "Ich heize auf 22 Grad" usw. weglassen). In "antwort" stehen nur
+Werte, Hinweise, Wissen und Rückfragen. Bei "befehl" bleibt "antwort" deshalb leer: "".
 
 REGELN
 - Der Text kommt aus einer Spracherkennung und kann falsch erkannte Wörter enthalten
@@ -112,8 +122,14 @@ REGELN
   Setze "rueckfrage" nur dann auf true, sonst immer false.
 - Wenn du eine Frage gestellt hast und der Nutzer mit "ja" antwortet, führe das Angebotene aus.
   Bei "nein" bestätige kurz und tu nichts.
-- Bei Bedingungen ("wenn es über 23 Grad hat ...") prüfe die aktuellen Werte und
-  handle nur, wenn die Bedingung jetzt erfüllt ist. Sag, was du festgestellt hast.
+- Hinter manchen Werten steht in Klammern eine BEWERTUNG des Hauses, z. B.
+  "Bodenfeuchte: 12 % (sehr trocken: gießen nötig)". Verlass dich auf diese Bewertung
+  und rechne nicht selbst. Wenig Bodenfeuchte heißt TROCKEN, also gießen.
+- Bei Bedingungen ("wenn es über 23 Grad hat ...", "wenn ja, dann ...") prüfe die Bedingung
+  anhand der Werte und Bewertungen. Ist sie erfüllt, schick den Befehl. Ist sie NICHT erfüllt,
+  schick KEINEN Befehl und sag kurz, warum. Sag immer, was du festgestellt hast.
+- Rückfragen des Nutzers ("Ist das nicht zu wenig?", "Und jetzt?") beziehen sich auf das,
+  worüber ihr gerade gesprochen habt, nicht auf irgendeinen anderen Wert im Haus.
 - Allgemeine Fragen (Wissen, Erklärungen) beantwortest du kurz und normal, ohne Befehle.
   Wenn du dir bei Fakten unsicher bist, sag das ehrlich. Erfinde nichts.
 - Erfinde keine Messwerte. Steht ein Wert als "kein Messwert", sag das.
@@ -122,11 +138,11 @@ REGELN
 BEISPIELE
 Zustand: 18 °C, Heizung aus, Klimaanlage aus. Hinweise: Fenster im Wohnzimmer ist offen.
 Nutzer: Mir ist kalt
-{"art":"situation","antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"heating","action":"set","value":22}],"rueckfrage":false}
+{"art":"situation","antwort":"Es hat gerade 18 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"heating","action":"set","value":22}],"rueckfrage":false}
 
 Zustand: Lichter an. Hinweise: Fenster im Wohnzimmer ist offen. Garagentor ist offen.
 Nutzer: Ich gehe jetzt schlafen
-{"art":"situation","antwort":"Gute Nacht! Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
+{"art":"situation","antwort":"Gute Nacht! Kurze Erinnerung: Das Fenster im Wohnzimmer ist noch offen, und das Garagentor ist auch offen. Soll ich das Garagentor schließen?","szene":"gute_nacht","befehle":[],"rueckfrage":true}
 
 Nutzer: Ja bitte
 {"art":"befehl","antwort":"","szene":"","befehle":[{"device":"garage","action":"close"}],"rueckfrage":false}
@@ -151,7 +167,18 @@ Nutzer: Mach alle Lichter an und sag mir, wie viel Kratz es hat, und erzähl was
 
 Zustand: 27 °C, Heizung aus, Klimaanlage aus.
 Nutzer: Mir ist zu warm
-{"art":"situation","antwort":"Es hat gerade 27 Grad. Ich schalte die Klimaanlage ein und kühle auf 23 Grad.","szene":"","befehle":[{"device":"cooling","action":"set","value":23}],"rueckfrage":false}
+{"art":"situation","antwort":"Es hat gerade 27 Grad.","szene":"","befehle":[{"device":"cooling","action":"set","value":23}],"rueckfrage":false}
+
+Zustand: Bodenfeuchte 8 % (sehr trocken: gießen nötig), Licht Arbeitszimmer aus.
+Nutzer: Muss ich meine Pflanze gießen? Wenn ja, mach Licht im Arbeitszimmer an
+{"art":"gemischt","antwort":"Ja, die Erde ist mit 8 Prozent sehr trocken, du solltest gießen.","szene":"","befehle":[{"device":"light","room":"arbeitszimmer","action":"on"}],"rueckfrage":false}
+
+Zustand: Bodenfeuchte 70 % (gut feucht: nicht gießen), Licht Arbeitszimmer aus.
+Nutzer: Muss ich meine Pflanze gießen? Wenn ja, mach Licht im Arbeitszimmer an
+{"art":"statusfrage","antwort":"Nein, die Erde ist mit 70 Prozent noch gut feucht. Deshalb lasse ich das Licht aus.","szene":"","befehle":[],"rueckfrage":false}
+
+Nutzer: Ist das nicht zu wenig?
+{"art":"statusfrage","antwort":"Nein, 70 Prozent Bodenfeuchte ist für die Pflanze genau richtig.","szene":"","befehle":[],"rueckfrage":false}
 
 Nutzer: Wie hoch ist der Mount Everest?
 {"art":"wissen","antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
@@ -315,16 +342,61 @@ def confirm(commands):
 
 
 # -------------------- Zustand fuer die KI aufbereiten --------------------
+def rate_temperature(t):
+    if t < 18:
+        return "kalt"
+    if t < 20:
+        return "kühl"
+    if t <= 24:
+        return "angenehm"
+    if t <= 26:
+        return "warm"
+    return "heiß"
+
+
+def rate_soil(p):
+    """Bewertung der Bodenfeuchte. Kleine Modelle verwechseln sonst, ob wenig Prozent gut oder schlecht ist."""
+    if p <= 0:
+        return "sehr trocken: gießen nötig - oder der Sensor ist nicht angeschlossen"
+    if p < 30:
+        return "sehr trocken: gießen nötig"
+    if p < 50:
+        return "etwas trocken: bald gießen"
+    if p <= 80:
+        return "gut feucht: nicht gießen"
+    return "sehr nass: auf keinen Fall gießen"
+
+
+# Saetze, in denen das Modell behauptet, selbst etwas zu schalten. Die Ansage macht der Code -
+# solche Saetze stimmen oft nicht mit dem ueberein, was wirklich passiert, und werden entfernt.
+_ACTION_CLAIM = re.compile(
+    r"\bich (schalte|mache|stelle|dimme|heize|kühle|öffne|schließe|drehe)\b"
+    r"|\bhabe\b.*\b(eingeschaltet|ausgeschaltet|angeschaltet|angemacht|ausgemacht|gestellt|"
+    r"gedimmt|geöffnet|geschlossen|aufgedreht|eingestellt)\b", re.IGNORECASE)
+
+
+def strip_action_claims(text):
+    """Entfernt Behauptungen wie 'Ich schalte das Licht ein.' - Fragen ('Soll ich ...?') bleiben."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    kept = [x for x in sentences if x.endswith("?") or not _ACTION_CLAIM.search(x)]
+    return " ".join(kept).strip()
+
+
 def describe_state(s):
-    """Macht aus dem ESP-JSON einen gut lesbaren Text (hilft kleinen Modellen)."""
+    """Macht aus dem ESP-JSON einen gut lesbaren Text mit Bewertungen.
+    Die Bewertungen rechnet der Code aus - so muss das Modell keine Zahlen deuten."""
     sens = s.get("sensors", {})
     t, h = sens.get("temperature"), sens.get("humidity")
+    soil = sens.get("soilPercent")
     lines = [
-        f"Temperatur: {t:.1f} °C" if t is not None else "Temperatur: kein Messwert",
+        f"Temperatur: {t:.1f} °C ({rate_temperature(t)})" if t is not None else "Temperatur: kein Messwert",
         f"Luftfeuchtigkeit: {h:.0f} %" if h is not None else "Luftfeuchtigkeit: kein Messwert",
-        f"Bodenfeuchte der Pflanze: {sens.get('soilPercent', 0)} %",
+        (f"Bodenfeuchte der Pflanze: {soil} % ({rate_soil(soil)})" if soil is not None
+         else "Bodenfeuchte der Pflanze: kein Messwert"),
     ]
-    lights = ", ".join(f"{ROOM_NAMES[r]} {v} %" for r, v in s.get("lights", {}).items())
+    # "aus" statt "0 %", damit 0-Werte nicht mit anderen Prozentangaben verwechselt werden
+    lights = ", ".join(f"{ROOM_NAMES[r]} {'aus' if v == 0 else f'{v} %'}"
+                       for r, v in s.get("lights", {}).items())
     lines.append(f"Licht: {lights}")
 
     for key, name, verb in (("heating", "Heizung", "heizt gerade"), ("cooling", "Klimaanlage", "kühlt gerade")):
@@ -414,6 +486,13 @@ def handle(user_text, pruefen=None):
             else:
                 ignored.append(c)
 
+        # Fragen schalten nie etwas - auch wenn das Modell trotzdem Befehle mitschickt
+        if result.get("art") in ("statusfrage", "wissen") and (commands or result.get("szene")):
+            ignored += commands
+            commands = []
+            result["szene"] = ""
+            print("[KI] Frage erkannt -> Befehle verworfen")
+
         # Rechte des Nutzers: Verbotenes wird nicht ausgefuehrt
         denied, deny_msg = [], ""
         if pruefen and commands:
@@ -426,24 +505,33 @@ def handle(user_text, pruefen=None):
             except (requests.RequestException, ValueError):
                 esp_result = {"status": "error", "error": "ESP nicht erreichbar"}
 
-        antwort = result.get("antwort", "")
+        art = result.get("art", "")
+        szene = result.get("szene", "")
+        antwort = strip_action_claims(result.get("antwort", ""))
         rueckfrage = bool(result.get("rueckfrage", False))
+
+        # Ansage, was geschaltet wurde - kommt IMMER vom Code, damit sie zur Wirklichkeit passt
+        if commands:
+            extra = commands[len(SCENES[szene]):] if szene in SCENE_TEXT and not denied else commands
+            if szene in SCENE_TEXT and not denied:
+                action_txt = (SCENE_TEXT[szene] + " " + confirm(extra)).strip() if extra else SCENE_TEXT[szene]
+            else:
+                action_txt = confirm(commands)
+            text = "" if art == "befehl" else antwort
+            antwort = f"{action_txt} {text}".strip()
+            if art == "befehl":
+                rueckfrage = False
         # Nichts davon durfte der Nutzer -> ehrlich sagen statt die KI-Antwort vorzulesen
-        if denied and not commands:
-            rest = antwort if result.get("art") == "gemischt" else ""
+        elif denied:
+            rest = antwort if art == "gemischt" else ""
             antwort = f"{deny_msg} {rest}".strip()
             rueckfrage = False
         # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
-        elif ignored and not commands:
+        elif ignored and art in ("befehl", "gemischt", "situation"):
             hinweis = "Das Schalten konnte ich leider nicht ausführen."
-            # Bei reinen Befehlen bleibt nur der Hinweis, sonst den Rest der Antwort behalten
-            antwort = hinweis if result.get("art") == "befehl" or not antwort else f"{hinweis} {antwort}"
+            antwort = hinweis if art == "befehl" or not antwort else f"{hinweis} {antwort}"
             rueckfrage = False
-        elif result.get("art") == "befehl" and commands and not result.get("szene"):
-            antwort = confirm(commands)        # nur bestaetigen, nichts anderes erzaehlen
-            rueckfrage = False
-        elif result.get("art") == "gemischt" and commands and not result.get("szene"):
-            antwort = (confirm(commands) + " " + antwort).strip()   # Bestaetigung + Rest der Antwort
+
         if denied and commands and deny_msg:
             antwort = f"{antwort} {deny_msg}".strip()
         if esp_result and esp_result.get("status") == "error":
@@ -458,7 +546,9 @@ def handle(user_text, pruefen=None):
 
         # Verlauf merken (ohne den langen Zustand), damit Rueckfragen wie "ja" funktionieren
         _history.append({"role": "user", "content": f"Nutzer: {user_text}"})
-        _history.append({"role": "assistant", "content": raw})
+        # Im Verlauf steht, was wirklich gesagt und getan wurde - nicht der Entwurf des Modells
+        _history.append({"role": "assistant", "content": json.dumps(
+            {**result, "antwort": antwort, "befehle": commands}, ensure_ascii=False)})
 
         return {
             "antwort": antwort,
