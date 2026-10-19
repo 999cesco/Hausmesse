@@ -132,7 +132,9 @@
   .seg { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg button { padding: 6px 12px; font-size: 14px; }
   .seg button.active { background: #33405f; border-color: var(--text); }
-  .stepper { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .thermo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  .hint-small { color: var(--dim); font-size: 12px; margin: 8px 0 0; }
   .stepper output { font: 600 18px var(--mono); min-width: 80px; text-align: center; }
 </style>
 </head>
@@ -248,18 +250,32 @@
       <h3>Licht</h3>
       <div id="lightControls"></div>
 
-      <h3>Klima</h3>
-      <div class="seg" id="climateSeg">
-        <button type="button" data-mode="off">Aus</button>
-        <button type="button" data-mode="heat">Heizen</button>
-        <button type="button" data-mode="cool">Kühlen</button>
-        <button type="button" data-mode="auto">Auto</button>
+      <h3>Heizung</h3>
+      <div class="thermo">
+        <div class="seg" id="heatingSeg">
+          <button type="button" data-mode="off">Aus</button>
+          <button type="button" data-mode="on">An</button>
+        </div>
+        <div class="stepper">
+          <button type="button" id="heatingDown" aria-label="Heiztemperatur senken">−</button>
+          <output id="heatingOut">--,- °C</output>
+          <button type="button" id="heatingUp" aria-label="Heiztemperatur erhöhen">+</button>
+        </div>
       </div>
-      <div class="stepper">
-        <button type="button" id="tempDown" aria-label="Zieltemperatur senken">−</button>
-        <output id="targetOut">--,- °C</output>
-        <button type="button" id="tempUp" aria-label="Zieltemperatur erhöhen">+</button>
+
+      <h3>Klimaanlage</h3>
+      <div class="thermo">
+        <div class="seg" id="coolingSeg">
+          <button type="button" data-mode="off">Aus</button>
+          <button type="button" data-mode="on">An</button>
+        </div>
+        <div class="stepper">
+          <button type="button" id="coolingDown" aria-label="Kühltemperatur senken">−</button>
+          <output id="coolingOut">--,- °C</output>
+          <button type="button" id="coolingUp" aria-label="Kühltemperatur erhöhen">+</button>
+        </div>
       </div>
+      <p class="hint-small">Es läuft immer nur eins: Heizung an schaltet die Klimaanlage aus und umgekehrt.</p>
 
       <h3>Lüfter</h3>
       <div class="seg" id="fanSeg">
@@ -283,7 +299,7 @@
 <script>
 const RIGHTS = window.RECHTE || null;      // null = darf alles
 const can = (ziel) => !RIGHTS || RIGHTS.ziele.includes(ziel);
-const TARGET = { light: c => "licht:" + c.room, climate: () => "klima", fan: () => "luefter",
+const TARGET = { light: c => "licht:" + c.room, heating: () => "heizung", cooling: () => "klima", fan: () => "luefter",
   garage: () => "garage", buzzer: () => "garage", window: () => "fenster" };
 
 const ROOMS = {
@@ -304,7 +320,6 @@ const fmt = n => n.toFixed(1).replace(".", ",");
 
 let state = null;
 let dragging = null;     // Raum, dessen Slider gerade bewegt wird
-let pendingTarget = null;
 
 function el(tag, attrs, parent) {
   const e = document.createElementNS(NS, tag);
@@ -359,28 +374,34 @@ function buildControls() {
       sendCommands([{ device: "light", room: id, action: "set", value: +sl.value }]);
     });
   }
-  $("climateSeg").addEventListener("click", e => {
-    const mode = e.target.dataset.mode;
-    if (mode) sendCommands([{ device: "climate", action: mode, value: currentTarget() }]);
-  });
+  for (const kind of ["heating", "cooling"]) {
+    const [min, max] = THERMO_RANGE[kind];
+    $(kind + "Seg").addEventListener("click", e => {
+      const mode = e.target.dataset.mode;
+      if (mode) sendCommands([{ device: kind, action: mode, value: currentTarget(kind) }]);
+    });
+    const step = d => {
+      pending[kind] = Math.max(min, Math.min(max, currentTarget(kind) + d));
+      $(kind + "Out").textContent = fmt(pending[kind]) + " °C";
+      // Ausgeschaltet bleibt ausgeschaltet - es wird nur die Zieltemperatur gemerkt
+      sendCommands([{ device: kind, action: state?.[kind]?.on ? "set" : "off", value: pending[kind] }]);
+    };
+    $(kind + "Down").addEventListener("click", () => step(-0.5));
+    $(kind + "Up").addEventListener("click", () => step(0.5));
+  }
   $("fanSeg").addEventListener("click", e => {
     const mode = e.target.dataset.mode;
     if (mode) sendCommands([{ device: "fan", action: mode }]);
   });
-  const step = d => {
-    pendingTarget = Math.max(10, Math.min(30, currentTarget() + d));
-    $("targetOut").textContent = fmt(pendingTarget) + " °C";
-    sendCommands([{ device: "climate", action: state?.climate?.mode || "auto", value: pendingTarget }]);
-  };
-  $("tempDown").addEventListener("click", () => step(-0.5));
-  $("tempUp").addEventListener("click", () => step(0.5));
   $("garageBtn").addEventListener("click", () => {
     const open = ["open", "opening"].includes(state?.garage);
     sendCommands([{ device: "garage", action: open ? "close" : "open" }]);
   });
 }
 
-const currentTarget = () => pendingTarget ?? state?.climate?.target ?? 21;
+const THERMO_RANGE = { heating: [10, 30], cooling: [16, 30] };
+const pending = { heating: null, cooling: null };
+const currentTarget = kind => pending[kind] ?? state?.[kind]?.target ?? (kind === "heating" ? 21 : 24);
 
 // ---------- Zustand anzeigen ----------
 function render(s) {
@@ -404,9 +425,8 @@ function render(s) {
   $("humText").textContent = h == null ? "-- % Luftfeuchte" : Math.round(h) + " % Luftfeuchte";
   $("soilText").textContent = (s.sensors?.soilPercent ?? "--") + " %";
 
-  const c = s.climate || {};
-  $("heater").setAttribute("fill", c.heating ? "#ef6b4f" : "#283249");
-  $("acDot").setAttribute("fill", c.cooling ? "#5bb0ec" : "#7d89a3");
+  $("heater").setAttribute("fill", s.heating?.active ? "#ef6b4f" : "#283249");
+  $("acDot").setAttribute("fill", s.cooling?.active ? "#5bb0ec" : "#7d89a3");
   $("fanBlades").classList.toggle("on", !!s.fan?.on);
   $("fanBlades").setAttribute("fill", s.fan?.on ? "#63d39a" : "#7d89a3");
 
@@ -424,9 +444,12 @@ function render(s) {
     g.querySelector("title").textContent = ROOMS[id].name + ": Fenster " + (open ? "offen" : "zu") + (sim ? " (klicken zum Umschalten)" : "");
   }
 
-  if (pendingTarget !== null && Math.abs(pendingTarget - c.target) < 0.01) pendingTarget = null;
-  $("targetOut").textContent = fmt(currentTarget()) + " °C";
-  setActive("climateSeg", c.mode);
+  for (const kind of ["heating", "cooling"]) {
+    const t = s[kind] || {};
+    if (pending[kind] !== null && Math.abs(pending[kind] - t.target) < 0.01) pending[kind] = null;
+    $(kind + "Out").textContent = fmt(currentTarget(kind)) + " °C";
+    setActive(kind + "Seg", t.on ? "on" : "off");
+  }
   setActive("fanSeg", s.fan?.mode);
 
   const simWins = s.simulatedWindows || [];
@@ -451,14 +474,15 @@ function setActive(segId, mode) {
 }
 
 function renderChips(s) {
-  const c = s.climate || {};
-  const modeTxt = { off: "aus", heat: "heizt auf", cool: "kühlt auf", auto: "hält" }[c.mode] || "?";
+  const thermo = (t, verb) => !t?.on ? "aus"
+    : t.active ? `${verb} auf ${fmt(t.target)} °C` : `an, ${fmt(t.target)} °C erreicht`;
   const lightsOn = Object.entries(s.lights || {}).filter(([, v]) => v > 0);
   const openWins = Object.entries(s.windows || {}).filter(([, v]) => v === "open").map(([k]) => ROOMS[k].name);
   const garageTxt = { open: "offen", closed: "zu", opening: "öffnet …", closing: "schließt …" }[s.garage] || "?";
 
   const chips = [
-    ["Klima", c.mode === "off" ? "aus" : `${modeTxt} ${fmt(c.target)} °C`],
+    ["Heizung", thermo(s.heating, "heizt")],
+    ["Klimaanlage", thermo(s.cooling, "kühlt")],
     ["Licht", lightsOn.length ? lightsOn.map(([k, v]) => `${ROOMS[k].name} ${v} %`).join(", ") : "alles aus"],
     ["Lüfter", s.fan?.on ? "an" : "aus"],
     ["Garagentor", garageTxt, s.garage !== "closed"],
@@ -500,7 +524,8 @@ function toast(text) {
 // ---------- Chat ----------
 const DEV_TXT = {
   light: c => `Licht ${ROOMS[c.room]?.name || "überall"} ${c.action === "off" ? "aus" : c.action === "on" ? "an" : c.value + " %"}`,
-  climate: c => `Klima ${{ off: "aus", heat: "heizen", cool: "kühlen", auto: "auto" }[c.action]}${c.value ? " " + fmt(c.value) + " °C" : ""}`,
+  heating: c => `Heizung ${c.action === "off" ? "aus" : "an"}${c.value ? " " + fmt(c.value) + " °C" : ""}`,
+  cooling: c => `Klimaanlage ${c.action === "off" ? "aus" : "an"}${c.value ? " " + fmt(c.value) + " °C" : ""}`,
   fan: c => `Lüfter ${{ on: "an", off: "aus", auto: "auto" }[c.action]}`,
   garage: c => `Garagentor ${c.action === "open" ? "öffnen" : "schließen"}`,
 };
@@ -569,7 +594,8 @@ function applyRights() {
     lamp.setAttribute("tabindex", "-1");
     lamp.setAttribute("aria-disabled", "true");
   }
-  if (!can("klima")) [...$("climateSeg").children, $("tempDown"), $("tempUp")].forEach(lock);
+  if (!can("heizung")) [...$("heatingSeg").children, $("heatingDown"), $("heatingUp")].forEach(lock);
+  if (!can("klima")) [...$("coolingSeg").children, $("coolingDown"), $("coolingUp")].forEach(lock);
   if (!can("luefter")) [...$("fanSeg").children].forEach(lock);
   if (!can("garage")) lock($("garageBtn"));
 }

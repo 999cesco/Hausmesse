@@ -137,5 +137,7 @@ def all_status():
         **results,
         "tts": {"aktiv": config.TTS_ENABLED, "bereit": tts.is_ready()},
         "sprache": {"aktiv": config.VOICE_ENABLED, "status": voice.status, "stumm": voice.is_muted(),
-                    "wakeword": config.WAKEWORD, **voice.last},
+                    "wakeword": (config.PORCUPINE_KEYWORD.rsplit("/", 1)[-1]
+                                 if getattr(config, "WAKEWORD_ENGINE", "") == "porcupine"
+                                 else config.WAKEWORD.rsplit("/", 1)[-1]), **voice.last},
     }

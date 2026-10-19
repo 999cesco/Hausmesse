@@ -4,14 +4,16 @@ ESP_IP = "192.168.0.103"                              # IP des ESP32 (Serieller 
 MODEL = "llama3.1:8b"                                 # exakter Name aus "ollama list"
 
 # ---- KI-Server ----
+# Firmenserver ueber VPN (aktuell):
+#   OLLAMA_URL = "http://192.168.95.1:11434/api/chat"
 # Laptop im selben WLAN (Plan B):
 #   OLLAMA_URL = "http://192.168.0.105:11434/api/chat"
 #   STT_URL    = "http://192.168.0.105:9000/transcribe"
 # Firmenserver ueber HTTPS (Caddy):
 #   OLLAMA_URL = "https://SERVERADRESSE/ollama/api/chat"
 #   STT_URL    = "https://SERVERADRESSE/stt/transcribe"
-OLLAMA_URL = "http://192.168.0.105:11434/api/chat"
-STT_URL = "http://192.168.0.105:9000/transcribe"
+OLLAMA_URL = "http://192.168.95.1:11434/api/chat"     # Server ueber VPN
+STT_URL = "http://192.168.95.1:9000/transcribe"
 
 # Nur fuer HTTPS ohne eigene Domain: Pfad zum Zertifikat des Servers, sonst leer lassen
 SERVER_CA = ""            # z. B. "/home/admin/Hausmesse/Pi/server_ca.crt"
@@ -45,8 +47,16 @@ TTS_DEVICE = "default"   # Audioausgang fuer aplay
 # Sprachsteuerung (Wakeword + Spracherkennung)
 VOICE_ENABLED = True
 MIC_DEVICE = "plughw:CARD=Q91,DEV=0"    # Mikro per Name statt Nummer (Nummer kann wechseln)
-WAKEWORD = "hey_jarvis"                 # oder "alexa", "hey_mycroft"
+WAKEWORD_ENGINE = "openwakeword"        # "openwakeword" oder "porcupine" (eigenes deutsches Wakeword)
+
+# openWakeWord: fertiges Modell ("hey_jarvis", "alexa", "hey_mycroft") oder Pfad zu eigener .onnx-Datei
+WAKEWORD = "hey_jarvis"
 WAKEWORD_THRESHOLD = 0.5                # hoeher = seltener faelschlich ausgeloest
+
+# Porcupine: Dateien aus der Picovoice Console; der Schluessel steht in geheim.py (PICOVOICE_KEY = "...")
+PORCUPINE_KEYWORD = "/home/admin/wakeword/wakeword.ppn"         # dein Wakeword
+PORCUPINE_MODEL = "/home/admin/wakeword/porcupine_params_de.pv"  # deutsches Sprachmodell
+PORCUPINE_SENSITIVITY = 0.5             # hoeher = reagiert leichter, aber auch oefter faelschlich
 VAD_LEVEL = 2                           # 0-3, hoeher = strengere Spracherkennung bei Laerm
 SILENCE_END_MS = 700                    # so lange Pause = du bist fertig mit Sprechen
 SPEECH_FACTOR = 2.5                     # so viel lauter als das Rauschen muss Sprache sein

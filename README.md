@@ -18,7 +18,7 @@ flowchart LR
 
 | Teil | Aufgabe |
 |---|---|
-| **ESP32** | Liest die Sensoren, schaltet Licht, Heizung, Klima, Lüfter und Garagentor und regelt die Temperatur selbstständig. |
+| **ESP32** | Liest die Sensoren, schaltet Licht, Heizung, Klimaanlage, Lüfter und Garagentor und regelt die Temperatur selbstständig. |
 | **Raspberry Pi** | Das „Gehirn“: stellt das Dashboard bereit, nimmt Anfragen an, fragt die KI und prüft jeden Befehl, bevor er ans Haus geht. |
 | **KI-Server** | Ein Sprachmodell über [Ollama](https://ollama.com), das die Sätze versteht und entscheidet, was passieren soll. |
 
@@ -29,8 +29,8 @@ flowchart LR
 | | Gerät | Im Modell |
 |---|---|---|
 | 💡 | Licht in 5 Räumen, dimmbar | LEDs |
-| 🔥 | Heizung | rote LED |
-| ❄️ | Klima / Kühlen | blaue LED |
+| 🔥 | Heizung (heizt) | rote LED |
+| ❄️ | Klimaanlage (kühlt) | blaue LED |
 | 🌀 | Lüfter | grüne LED |
 | 🚗 | Garagentor mit Warnsignal | Servo + Buzzer, auch per IR-Fernbedienung |
 | 🌡️ | Temperatur & Luftfeuchte | DHT11 |
@@ -86,7 +86,7 @@ Hausmesse/
 
 ## Stand
 
-- [x] Modellhaus mit Sensoren, Licht, Klima-Regelung und Garagentor
+- [x] Modellhaus mit Sensoren, Licht, Heizung, Klimaanlage und Garagentor
 - [x] Web-Dashboard mit Live-Modellhaus und manueller Steuerung
 - [x] KI-Chat mit Szenen, Erinnerungen und Rückfragen
 - [x] Sprachausgabe

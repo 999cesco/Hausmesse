@@ -2,7 +2,8 @@
 Sprachassistent: Wakeword -> Aufnahme -> Spracherkennung -> KI -> Sprachausgabe.
 
 Ablauf:
-  1. Das Mikro laeuft dauerhaft, openWakeWord hoert auf das Wakeword ("Hey Jarvis").
+  1. Das Mikro laeuft dauerhaft und hoert auf das Wakeword - entweder mit openWakeWord
+     (fertig oder selbst trainiert) oder mit Picovoice Porcupine (eigenes deutsches Wakeword).
   2. Erkannt -> kurzer Signalton, Aufnahme startet.
   3. webrtcvad erkennt, wann du aufhoerst zu sprechen -> Aufnahme endet (zweiter Ton).
   4. Text an die KI (ki.handle), Antwort wird vorgelesen.
@@ -185,28 +186,86 @@ def _dialog(vad):
             return
 
 
+# ---------- Wakeword-Erkennung ----------
+
+class _OpenWakeWord:
+    """openWakeWord: fertige Wakewords ("hey_jarvis") oder ein selbst trainiertes Modell (.onnx)."""
+
+    def __init__(self):
+        from openwakeword.model import Model
+        ww = config.WAKEWORD
+        if not ww.endswith(".onnx"):           # fertiges Modell -> bei Bedarf herunterladen
+            try:
+                import openwakeword.utils
+                openwakeword.utils.download_models([ww])
+            except Exception as e:
+                print(f"[VOICE] Wakeword-Modell konnte nicht geladen werden: {e}")
+        self.model = Model(wakeword_models=[ww], inference_framework="onnx")
+        self.name = ww.rsplit("/", 1)[-1].removesuffix(".onnx")
+
+    def detect(self, chunk):
+        score = max(self.model.predict(np.frombuffer(chunk, dtype=np.int16)).values())
+        return score >= config.WAKEWORD_THRESHOLD, score
+
+    def reset(self):
+        self.model.reset()
+
+
+class _Porcupine:
+    """Picovoice Porcupine: eigenes Wakeword (auch auf Deutsch), in der Picovoice Console erstellt."""
+
+    def __init__(self):
+        import pvporcupine
+        from geheim import PICOVOICE_KEY       # Schluessel steht nicht im oeffentlichen Repo
+        self.handle = pvporcupine.create(
+            access_key=PICOVOICE_KEY,
+            keyword_paths=[config.PORCUPINE_KEYWORD],
+            model_path=config.PORCUPINE_MODEL or None,     # deutsches Modell fuer deutsche Wakewords
+            sensitivities=[config.PORCUPINE_SENSITIVITY])
+        self.frame = self.handle.frame_length              # 512 Samples
+        self.buf = np.zeros(0, dtype=np.int16)
+        self.name = config.PORCUPINE_KEYWORD.rsplit("/", 1)[-1].split("_")[0]
+
+    def detect(self, chunk):
+        self.buf = np.concatenate([self.buf, np.frombuffer(chunk, dtype=np.int16)])
+        found = False
+        while len(self.buf) >= self.frame:
+            if self.handle.process(self.buf[:self.frame].tolist()) >= 0:
+                found = True
+            self.buf = self.buf[self.frame:]
+        return found, 1.0 if found else 0.0
+
+    def reset(self):
+        self.buf = np.zeros(0, dtype=np.int16)
+
+
+def _make_detector():
+    if getattr(config, "WAKEWORD_ENGINE", "openwakeword") == "porcupine":
+        return _Porcupine()
+    return _OpenWakeWord()
+
+
 def _loop():
     global status
     import webrtcvad
-    from openwakeword.model import Model
 
     stt.load()
-    try:                                       # fehlt das Wakeword-Modell, wird es geladen
-        import openwakeword.utils
-        openwakeword.utils.download_models([config.WAKEWORD])
+    try:
+        detector = _make_detector()
     except Exception as e:
-        print(f"[VOICE] Wakeword-Modell konnte nicht geladen werden: {e}")
-    model = Model(wakeword_models=[config.WAKEWORD], inference_framework="onnx")
+        status = "aus"
+        print(f"[VOICE] Wakeword-Erkennung konnte nicht starten: {e}")
+        return
     vad = webrtcvad.Vad(config.VAD_LEVEL)
     threading.Thread(target=_mic_reader, daemon=True).start()
-    print(f"[VOICE] Bereit - sag '{config.WAKEWORD}'")
+    print(f"[VOICE] Bereit - sag '{detector.name}'")
     quiet_until = 0
 
     while True:
         status = "stumm" if _muted else ("spricht" if tts.is_busy() else "bereit")
         if _muted or tts.is_busy():            # stumm oder Pi spricht gerade
             _flush()
-            model.reset()
+            detector.reset()
             time.sleep(0.1)
             quiet_until = time.time() + 0.6    # kurz nach dem Sprechen nicht auf sich selbst reagieren
             continue
@@ -217,15 +276,14 @@ def _loop():
 
         chunk = _audio.get()
         _update_noise(chunk)
-        scores = model.predict(np.frombuffer(chunk, dtype=np.int16))
-        score = max(scores.values())
-        if score >= config.WAKEWORD_THRESHOLD and not _muted:
+        found, score = detector.detect(chunk)
+        if found and not _muted:
             print(f"[VOICE] Wakeword erkannt ({score:.2f})")
             try:
                 _dialog(vad)
             except Exception as e:
                 print(f"[VOICE] Fehler im Dialog: {e}")
-            model.reset()
+            detector.reset()
             _flush()
             quiet_until = time.time() + 0.6
 

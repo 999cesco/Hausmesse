@@ -21,7 +21,8 @@ TARGETS = [
     ("licht:wohnzimmer", "Licht Wohnzimmer"),
     ("licht:kueche", "Licht Küche"),
     ("licht:garage", "Licht Garage"),
-    ("klima", "Heizung und Klima"),
+    ("heizung", "Heizung"),
+    ("klima", "Klimaanlage"),
     ("luefter", "Lüfter"),
     ("garage", "Garagentor"),
     ("fenster", "Fenster (simuliert)"),
@@ -34,7 +35,18 @@ _actions = {}   # Benutzer -> Zeitpunkte seiner letzten Aktionen
 
 
 def default():
-    return {"ziele": list(TARGET_KEYS), "chat": True, "pro_minute": 0}
+    return {"ziele": list(TARGET_KEYS), "chat": True, "pro_minute": 0, "v": 2}
+
+
+def upgrade(r):
+    """Rechte aus der Zeit, als Heizung und Klima noch ein Geraet waren: wer "klima"
+    durfte, darf jetzt Heizung UND Klimaanlage."""
+    if not r or r.get("v", 1) >= 2:
+        return r
+    ziele = list(r.get("ziele", []))
+    if "klima" in ziele and "heizung" not in ziele:
+        ziele.append("heizung")
+    return {**r, "ziele": [k for k in TARGET_KEYS if k in ziele], "v": 2}
 
 
 def normalize(r):
@@ -51,14 +63,14 @@ def normalize(r):
     if not 0 <= pro_minute <= MAX_PER_MINUTE:
         raise ValueError(f"Aktionen pro Minute: erlaubt sind 0 bis {MAX_PER_MINUTE}")
     return {"ziele": [k for k in TARGET_KEYS if k in ziele],    # feste Reihenfolge
-            "chat": bool(r.get("chat", False)), "pro_minute": pro_minute}
+            "chat": bool(r.get("chat", False)), "pro_minute": pro_minute, "v": 2}
 
 
 def target_of(cmd):
     d = cmd.get("device")
     if d == "light":
         return "licht:" + str(cmd.get("room"))
-    return {"climate": "klima", "fan": "luefter", "garage": "garage",
+    return {"heating": "heizung", "cooling": "klima", "fan": "luefter", "garage": "garage",
             "buzzer": "garage", "window": "fenster"}.get(d)
 
 

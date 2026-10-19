@@ -180,7 +180,7 @@ def update_user(name, rolle=None, gesperrt=None, gueltig_bis=None, rechte_neu=No
 def _public(name, u):
     return {"name": name, "rolle": u["rolle"], "gesperrt": bool(u.get("gesperrt")),
             "gueltig_bis": u.get("gueltig_bis", ""), "abgelaufen": _expired(u),
-            "rechte": u.get("rechte") or rechte.default()}
+            "rechte": rechte.upgrade(u.get("rechte")) or rechte.default()}
 
 
 def list_users():
@@ -250,7 +250,7 @@ def current_user():
         return None
     return {"name": name, "rolle": user["rolle"],
             # Admins duerfen alles -> keine Einschraenkungen
-            "rechte": None if user["rolle"] == "admin" else (user.get("rechte") or rechte.default())}
+            "rechte": None if user["rolle"] == "admin" else (rechte.upgrade(user.get("rechte")) or rechte.default())}
 
 
 def _deny(status, msg):

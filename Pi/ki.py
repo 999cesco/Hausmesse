@@ -29,17 +29,18 @@ SCENES = {
     "gute_nacht": [
         {"device": "light", "room": "alle", "action": "off"},
         {"device": "light", "room": "schlafzimmer", "action": "set", "value": 20},
-        {"device": "climate", "action": "heat", "value": 18},
+        {"device": "heating", "action": "set", "value": 18},
         {"device": "fan", "action": "auto"},
     ],
     "guten_morgen": [
         {"device": "light", "room": "schlafzimmer", "action": "set", "value": 60},
         {"device": "light", "room": "kueche", "action": "on"},
-        {"device": "climate", "action": "auto", "value": 21},
+        {"device": "heating", "action": "set", "value": 21},
     ],
     "alles_aus": [
         {"device": "light", "room": "alle", "action": "off"},
-        {"device": "climate", "action": "off"},
+        {"device": "heating", "action": "off"},
+        {"device": "cooling", "action": "off"},
         {"device": "fan", "action": "off"},
     ],
 }
@@ -49,22 +50,25 @@ Du verstehst normale Sätze, denkst mit und handelst selbstständig.
 
 DAS HAUS
 Räume mit dimmbarem Licht (0-100 %): schlafzimmer, arbeitszimmer, wohnzimmer, kueche, garage
-Klima: Modus off / heat (heizen) / cool (kühlen) / auto, mit Zieltemperatur 10-30 °C.
-  Das Haus regelt selbst: es heizt bzw. kühlt, bis die Zieltemperatur erreicht ist.
-Lüfter: on / off / auto (läuft automatisch beim Kühlen)
+Heizung (heating): HEIZT nur. on / off / set mit Zieltemperatur 10-30 °C.
+Klimaanlage (cooling): KÜHLT nur. on / off / set mit Zieltemperatur 16-30 °C.
+  Beide regeln selbst, bis die Zieltemperatur erreicht ist. Es läuft immer nur eins:
+  Schaltest du die Heizung ein, geht die Klimaanlage aus und umgekehrt.
+Lüfter: on / off / auto (läuft automatisch, wenn die Klimaanlage kühlt)
 Garagentor: open / close
 Fenster: kannst du NICHT steuern, nur daran erinnern.
 
 BEFEHLE (Feld "befehle")
 {"device":"light","room":"<raum oder alle>","action":"on"|"off"|"set","value":<0-100 bei set>}
-{"device":"climate","action":"off"|"heat"|"cool"|"auto","value":<zieltemperatur, optional>}
+{"device":"heating","action":"on"|"off"|"set","value":<zieltemperatur, bei set>}
+{"device":"cooling","action":"on"|"off"|"set","value":<zieltemperatur, bei set>}
 {"device":"fan","action":"on"|"off"|"auto"}
 {"device":"garage","action":"open"|"close"}
 
 SZENEN (Feld "szene") - nutze sie, wenn sie passen, statt alles einzeln aufzuzählen:
 gute_nacht   = alle Lichter aus, Schlafzimmer auf 20 % gedimmt, Heizung auf 18 °C
-guten_morgen = Schlafzimmer 60 %, Küche hell, Klima auto auf 21 °C
-alles_aus    = alle Lichter, Klima und Lüfter aus
+guten_morgen = Schlafzimmer 60 %, Küche hell, Heizung auf 21 °C
+alles_aus    = alle Lichter, Heizung, Klimaanlage und Lüfter aus
 Sonst "szene": "".
 
 ART DER ANFRAGE (Feld "art") - entscheide das ZUERST:
@@ -94,10 +98,12 @@ REGELN
   Erwähne nie andere Räume oder Geräte als die, um die es geht.
 - WICHTIG: Was du schalten willst, MUSS als Befehl in "befehle" (oder als "szene") stehen.
   Nur das wird ausgeführt. Behaupte nie, etwas getan zu haben, ohne den passenden Befehl.
-- Es gibt nur EINE Heizung/Klimaanlage für das ganze Haus, keine pro Raum.
+- Es gibt EINE Heizung und EINE Klimaanlage für das ganze Haus, nicht pro Raum.
+  Die Heizung heizt, die Klimaanlage kühlt. Die Klimaanlage heizt NIE.
   Die Garage hat nur Licht und das Tor.
 - "Garage öffnen/aufmachen" = Garagentor open. "Garage zu" = Garagentor close.
-- Denk mit: "Mir ist kalt" heißt heizen. Prüfe dafür die aktuelle Temperatur.
+- Denk mit: "Mir ist kalt" heißt Heizung an, "Mir ist warm" heißt Klimaanlage an.
+  Prüfe dafür die aktuelle Temperatur.
 - HINWEISE (offenes Fenster, offenes Garagentor) erwähnst du NUR bei art "situation"
   und nur, wenn sie dazu passen (Kälte, Schlafen, Verlassen des Hauses).
   Biete bei einem offenen Garagentor an, es zu schließen, schließe es aber nicht ungefragt.
@@ -114,9 +120,9 @@ REGELN
 - Ergibt der Satz keinen Sinn (z. B. nur ein einzelnes Wort), frag kurz nach, was gemeint ist.
 
 BEISPIELE
-Zustand: 18 °C, Klima aus. Hinweise: Fenster im Wohnzimmer ist offen.
+Zustand: 18 °C, Heizung aus, Klimaanlage aus. Hinweise: Fenster im Wohnzimmer ist offen.
 Nutzer: Mir ist kalt
-{"art":"situation","antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"climate","action":"heat","value":22}],"rueckfrage":false}
+{"art":"situation","antwort":"Es hat gerade 18 Grad, ich heize auf 22 Grad. Übrigens ist das Fenster im Wohnzimmer noch offen, schließ es lieber, sonst geht die Wärme raus.","szene":"","befehle":[{"device":"heating","action":"set","value":22}],"rueckfrage":false}
 
 Zustand: Lichter an. Hinweise: Fenster im Wohnzimmer ist offen. Garagentor ist offen.
 Nutzer: Ich gehe jetzt schlafen
@@ -131,17 +137,21 @@ Nutzer: Mach im Arbeitszimmer Licht, aber nicht so hell
 Nutzer: Garage öffnen
 {"art":"befehl","antwort":"","szene":"","befehle":[{"device":"garage","action":"open"}],"rueckfrage":false}
 
-Zustand: 23 °C, Luftfeuchtigkeit 50 %, alle Lichter an, Klima aus, Fenster im Schlafzimmer offen.
+Zustand: 23 °C, Luftfeuchtigkeit 50 %, alle Lichter an, Heizung und Klimaanlage aus, Fenster im Schlafzimmer offen.
 Nutzer: Mach das Licht in der Küche aus
 {"art":"befehl","antwort":"","szene":"","befehle":[{"device":"light","room":"kueche","action":"off"}],"rueckfrage":false}
 
-Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Klima aus, Fenster im Schlafzimmer offen.
+Zustand: 23 °C, Luftfeuchtigkeit 50 %, Lichter an, Heizung und Klimaanlage aus, Fenster im Schlafzimmer offen.
 Nutzer: Wie warm ist es?
 {"art":"statusfrage","antwort":"Im Haus hat es gerade 23 Grad.","szene":"","befehle":[],"rueckfrage":false}
 
 Zustand: 21 °C, Luftfeuchtigkeit 45 %, Lichter aus.
 Nutzer: Mach alle Lichter an und sag mir, wie viel Kratz es hat, und erzähl was über Beethoven
 {"art":"gemischt","antwort":"Im Haus hat es 21 Grad. Beethoven war ein deutscher Komponist aus Bonn, der viele seiner berühmtesten Werke schrieb, als er schon fast taub war.","szene":"","befehle":[{"device":"light","room":"alle","action":"on"}],"rueckfrage":false}
+
+Zustand: 27 °C, Heizung aus, Klimaanlage aus.
+Nutzer: Mir ist zu warm
+{"art":"situation","antwort":"Es hat gerade 27 Grad. Ich schalte die Klimaanlage ein und kühle auf 23 Grad.","szene":"","befehle":[{"device":"cooling","action":"set","value":23}],"rueckfrage":false}
 
 Nutzer: Wie hoch ist der Mount Everest?
 {"art":"wissen","antwort":"Der Mount Everest ist etwa 8849 Meter hoch und damit der höchste Berg der Erde.","szene":"","befehle":[],"rueckfrage":false}
@@ -160,10 +170,9 @@ RESPONSE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "device": {"type": "string", "enum": ["light", "climate", "fan", "garage"]},
+                    "device": {"type": "string", "enum": ["light", "heating", "cooling", "fan", "garage"]},
                     "room": {"type": "string", "enum": LIGHT_ROOMS + ["alle"]},
-                    "action": {"type": "string", "enum": ["on", "off", "set", "heat", "cool",
-                                                          "auto", "open", "close"]},
+                    "action": {"type": "string", "enum": ["on", "off", "set", "auto", "open", "close"]},
                     "value": {"type": "number"},
                 },
                 "required": ["device", "action"],
@@ -219,14 +228,29 @@ def validate(cmd, allow_window=False):
             return {"device": "light", "room": room, "action": action}
         return None
 
-    if device == "climate":
-        if action in ("set", "on"):                # "Heizung auf 22" -> heizen
-            action = "heat"
-        if action in ("off", "heat", "cool", "auto"):
-            out = {"device": "climate", "action": action}
+    if device in ("heating", "cooling"):
+        lo = 10 if device == "heating" else 16
+        if action in ("heat", "cool", "auto"):         # alte Schreibweisen -> einschalten
+            action = "on"
+        if action == "set" and not has_value:          # "set" ohne Wert -> einfach an
+            action = "on"
+        if action in ("on", "off", "set"):
+            out = {"device": device, "action": action}
             if has_value:
-                out["value"] = max(10, min(30, round(float(value), 1)))
+                out["value"] = max(lo, min(30, round(float(value), 1)))
+                if action == "on":
+                    out["action"] = "set"
             return out
+        return None
+
+    # Alte Form "climate" (falls die KI sie doch benutzt): heizen -> Heizung, kuehlen -> Klimaanlage
+    if device == "climate":
+        if action in ("heat", "set", "on", "auto"):
+            return validate({**cmd, "device": "heating", "action": "set" if has_value else "on"})
+        if action == "cool":
+            return validate({**cmd, "device": "cooling", "action": "set" if has_value else "on"})
+        if action == "off":
+            return {"device": "heating", "action": "off"}
         return None
 
     if device == "fan":
@@ -267,11 +291,14 @@ def confirm_text(cmd):
         if a == "set":
             return f"{wo} auf {v} Prozent." if v > 0 else f"{wo} aus."
         return f"{wo} {'an' if a == 'on' else 'aus'}."
-    if d == "climate":
-        ziel = f" auf {_num(v)} Grad" if v is not None else ""
-        return {"heat": f"Ich heize{ziel}.", "cool": f"Ich kühle{ziel}.",
-                "auto": f"Die Klimaregelung steht auf Automatik{ziel}.",
-                "off": "Heizung und Klimaanlage sind aus."}[a]
+    if d == "heating":
+        if a == "off":
+            return "Die Heizung ist aus."
+        return f"Die Heizung heizt auf {_num(v)} Grad." if v is not None else "Die Heizung ist an."
+    if d == "cooling":
+        if a == "off":
+            return "Die Klimaanlage ist aus."
+        return f"Die Klimaanlage kühlt auf {_num(v)} Grad." if v is not None else "Die Klimaanlage ist an."
     if d == "fan":
         return {"on": "Der Lüfter ist an.", "off": "Der Lüfter ist aus.",
                 "auto": "Der Lüfter läuft jetzt automatisch."}[a]
@@ -300,10 +327,13 @@ def describe_state(s):
     lights = ", ".join(f"{ROOM_NAMES[r]} {v} %" for r, v in s.get("lights", {}).items())
     lines.append(f"Licht: {lights}")
 
-    c = s.get("climate", {})
-    mode = {"off": "aus", "heat": "heizen", "cool": "kühlen", "auto": "automatisch"}.get(c.get("mode"), "?")
-    activ = "heizt gerade" if c.get("heating") else "kühlt gerade" if c.get("cooling") else "inaktiv"
-    lines.append(f"Klima: {mode}, Ziel {c.get('target', 0):.1f} °C, {activ}")
+    for key, name, verb in (("heating", "Heizung", "heizt gerade"), ("cooling", "Klimaanlage", "kühlt gerade")):
+        t = s.get(key, {})
+        if t.get("on"):
+            lines.append(f"{name}: an, Ziel {t.get('target', 0):.1f} °C, "
+                         f"{verb if t.get('active') else 'Ziel erreicht'}")
+        else:
+            lines.append(f"{name}: aus")
 
     f = s.get("fan", {})
     lines.append(f"Lüfter: {'läuft' if f.get('on') else 'aus'} (Modus {f.get('mode')})")
