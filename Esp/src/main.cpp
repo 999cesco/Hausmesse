@@ -24,7 +24,7 @@ constexpr int DHT_PIN = 17;
 
 constexpr int HEAT_PIN = 12;  // rote LED   = Heizung
 constexpr int FAN_PIN = 14;   // gruene LED = Luefter
-constexpr int COOL_PIN = 27;  // blaue LED  = Klima kuehlt
+constexpr int COOL_PIN = 27;  // blaue LED  = Klimaanlage (kuehlt)
 
 constexpr int IR_PIN = 4;
 constexpr int BUZZER_PIN = 25;
@@ -75,11 +75,14 @@ float lastTemperature = NAN;
 float lastHumidity = NAN;
 int lastSoilPercent = 0;
 
-// Klima: Modus off / heat / cool / auto, Zieltemperatur
-String climateMode = "off";
-float targetTemp = 21.0;
-bool heating = false;
-bool cooling = false;
+// Heizung (heizt) und Klimaanlage (kuehlt) sind zwei getrennte Geraete,
+// jeweils an/aus mit eigener Zieltemperatur. Es laeuft immer nur eins von beiden.
+bool heatingOn = false;      // Heizung eingeschaltet?
+float heatTarget = 21.0;     // heizt bis zu dieser Temperatur
+bool heating = false;        // heizt gerade wirklich (rote LED)
+bool coolingOn = false;      // Klimaanlage eingeschaltet?
+float coolTarget = 24.0;     // kuehlt bis zu dieser Temperatur
+bool cooling = false;        // kuehlt gerade wirklich (blaue LED)
 
 // Luefter: auto (laeuft mit, wenn gekuehlt wird) / on / off
 String fanMode = "auto";
@@ -100,6 +103,7 @@ bool buttonStableState = HIGH;
 bool lastButtonReading = HIGH;
 unsigned long lastDebounceTime = 0;
 unsigned long buttonPressStart = 0;
+bool buttonArmed = false;   // erst scharf, nachdem der Taster einmal losgelassen war
 bool wifiResetTriggered = false;
 
 // =====================================================================
@@ -132,22 +136,19 @@ int readSoilPercent() {
 
 // -------------------- Klima-Regelung --------------------
 void updateClimate() {
-  bool mayHeat = (climateMode == "heat" || climateMode == "auto");
-  bool mayCool = (climateMode == "cool" || climateMode == "auto");
-
-  if (isnan(lastTemperature) || climateMode == "off") {
+  if (isnan(lastTemperature)) {
     heating = false;
     cooling = false;
   } else {
-    // Heizen: an, wenn deutlich zu kalt; aus, sobald Ziel erreicht
-    if (!mayHeat) heating = false;
-    else if (lastTemperature < targetTemp - HYSTERESIS) heating = true;
-    else if (lastTemperature >= targetTemp) heating = false;
+    // Heizung: heizt, wenn deutlich zu kalt; hoert auf, sobald das Ziel erreicht ist
+    if (!heatingOn) heating = false;
+    else if (lastTemperature < heatTarget - HYSTERESIS) heating = true;
+    else if (lastTemperature >= heatTarget) heating = false;
 
-    // Kuehlen: an, wenn deutlich zu warm; aus, sobald Ziel erreicht
-    if (!mayCool) cooling = false;
-    else if (lastTemperature > targetTemp + HYSTERESIS) cooling = true;
-    else if (lastTemperature <= targetTemp) cooling = false;
+    // Klimaanlage: kuehlt, wenn deutlich zu warm; hoert auf, sobald das Ziel erreicht ist
+    if (!coolingOn) cooling = false;
+    else if (lastTemperature > coolTarget + HYSTERESIS) cooling = true;
+    else if (lastTemperature <= coolTarget) cooling = false;
   }
 
   if (fanMode == "on") fanOn = true;
@@ -226,15 +227,28 @@ String executeCommand(JsonObject c) {
       setLight(idx, brightness);
     }
 
-  } else if (device == "climate") {
-    if (action != "off" && action != "heat" && action != "cool" && action != "auto") {
-      return "climate: action off/heat/cool/auto";
-    }
+  } else if (device == "heating") {
+    // Heizung: on / off / set (set = auf Zieltemperatur heizen)
+    if (action != "on" && action != "off" && action != "set") return "heating: action on/off/set";
+    if (action == "set" && !hasValue) return "heating: set needs value";
     if (hasValue) {
-      if (value < 10 || value > 30) return "climate: value 10..30";
-      targetTemp = value;
+      if (value < 10 || value > 30) return "heating: value 10..30";
+      heatTarget = value;
     }
-    climateMode = action;
+    heatingOn = (action != "off");
+    if (heatingOn) coolingOn = false;   // nie gleichzeitig heizen und kuehlen
+    updateClimate();
+
+  } else if (device == "cooling") {
+    // Klimaanlage: on / off / set (set = auf Zieltemperatur kuehlen)
+    if (action != "on" && action != "off" && action != "set") return "cooling: action on/off/set";
+    if (action == "set" && !hasValue) return "cooling: set needs value";
+    if (hasValue) {
+      if (value < 16 || value > 30) return "cooling: value 16..30";
+      coolTarget = value;
+    }
+    coolingOn = (action != "off");
+    if (coolingOn) heatingOn = false;   // nie gleichzeitig heizen und kuehlen
     updateClimate();
 
   } else if (device == "fan") {
@@ -324,11 +338,15 @@ void handleState() {
     if (WINDOW_PINS[i] < 0) simulated.add(WINDOW_ROOMS[i]);
   }
 
-  JsonObject climate = doc["climate"].to<JsonObject>();
-  climate["mode"] = climateMode;
-  climate["target"] = targetTemp;
-  climate["heating"] = heating;
-  climate["cooling"] = cooling;
+  JsonObject heat = doc["heating"].to<JsonObject>();
+  heat["on"] = heatingOn;
+  heat["target"] = heatTarget;
+  heat["active"] = heating;
+
+  JsonObject cool = doc["cooling"].to<JsonObject>();
+  cool["on"] = coolingOn;
+  cool["target"] = coolTarget;
+  cool["active"] = cooling;
 
   JsonObject fan = doc["fan"].to<JsonObject>();
   fan["mode"] = fanMode;
@@ -360,6 +378,12 @@ void setupWiFi() {
 }
 
 void handleWifiResetButton() {
+  // Schutz: Ist der Pin schon beim Start LOW (Taster falsch eingesteckt, Kabel an GND),
+  // wird nichts geloescht, bis der Taster einmal losgelassen war.
+  if (!buttonArmed) {
+    if (digitalRead(WIFI_RESET_BUTTON_PIN) == HIGH) buttonArmed = true;
+    else return;
+  }
   int reading = digitalRead(WIFI_RESET_BUTTON_PIN);
   if (reading != lastButtonReading) lastDebounceTime = millis();
 
@@ -458,8 +482,9 @@ void loop() {
 
     updateClimate();
 
-    Serial.printf("T=%.1f C  H=%.0f %%  Boden=%d %%  Klima=%s/%.1f  Heizt=%d Kuehlt=%d  Garage=%s\n",
-                  lastTemperature, lastHumidity, lastSoilPercent, climateMode.c_str(), targetTemp,
-                  heating, cooling, garageState().c_str());
+    Serial.printf("T=%.1f C  H=%.0f %%  Boden=%d %%  Heizung=%s/%.1f(%d)  Klima=%s/%.1f(%d)  Garage=%s\n",
+                  lastTemperature, lastHumidity, lastSoilPercent,
+                  heatingOn ? "an" : "aus", heatTarget, heating,
+                  coolingOn ? "an" : "aus", coolTarget, cooling, garageState().c_str());
   }
 }
