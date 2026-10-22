@@ -68,6 +68,12 @@ STT_MODE = "server"                     # "server" oder "local" (Whisper direkt 
 STT_LOCAL_MODEL = "base"                # nur fuer "local": tiny / base / small
 
 
+# Schnellerkennung einfacher Befehle (ohne KI, siehe schnell.py)
+SCHNELL_AKTIV = True
+SCHNELL_FRAGE_RAUM = "In welchem Raum?"
+SCHNELL_FRAGE_PROZENT = "Auf wie viel Prozent?"
+SCHNELL_FRAGE_GRAD = "Auf wie viel Grad?"
+
 # ---- Einstellungen aus dem Admin-Bereich ----
 # Was im Browser unter "Einstellungen" geaendert wird, steht in einstellungen.json
 # (von Git ignoriert) und ueberschreibt die Werte oben.

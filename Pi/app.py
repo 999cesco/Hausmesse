@@ -22,12 +22,14 @@ import auth
 import config
 import ki
 import rechte
+import schnell
 import settings
 import status_info
 import tts
 import voice
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+schnell.init()                       # Datenbank der Schnellerkennung anlegen bzw. laden
 STATIC = os.path.join(BASE, "static")
 
 # static_folder=None: keine Datei ist ohne Anmeldung abrufbar (ausser der Login-Seite)
@@ -178,7 +180,7 @@ def chat():
     if not text:
         return jsonify({"antwort": "", "befehle": []}), 400
     pruefen = None if user["rechte"] is None else rechte.filter_for(user["name"], user["rechte"])
-    result = ki.handle(text, pruefen)
+    result = schnell.antworte(text, f"chat:{user['name']}", pruefen)   # einfache Befehle direkt, sonst KI
     tts.say(result.get("antwort", ""))
     return jsonify(result)
 
@@ -189,6 +191,7 @@ def chat_reset():
     user = auth.current_user()
     if user["rechte"] is not None and not user["rechte"]["chat"]:
         return jsonify({"error": "Du darfst den KI-Chat nicht benutzen."}), 403
+    schnell.cancel(f"chat:{user['name']}")
     ki.reset_history()
     return jsonify({"status": "ok"})
 
@@ -259,6 +262,59 @@ def admin_tts_test():
     return jsonify({"ok": True})
 
 
+# ---------- Schnellerkennung ----------
+
+@app.get("/api/admin/schnell")
+@auth.admin_required
+def admin_schnell():
+    return jsonify(schnell.list_all())
+
+
+@app.post("/api/admin/schnell")
+@auth.admin_required
+def admin_schnell_add():
+    d = request.get_json(silent=True) or {}
+    try:
+        schnell.add(d.get("muster", ""), d.get("aktion", ""), d.get("werte") or {})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/schnell/<int:mid>")
+@auth.admin_required
+def admin_schnell_toggle(mid):
+    schnell.set_active(mid, bool((request.get_json(silent=True) or {}).get("aktiv")))
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/admin/schnell/<int:mid>")
+@auth.admin_required
+def admin_schnell_delete(mid):
+    schnell.delete(mid)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/schnell/test")
+@auth.admin_required
+def admin_schnell_test():
+    return jsonify(schnell.test(str((request.get_json(silent=True) or {}).get("text", ""))[:200]))
+
+
+@app.post("/api/admin/schnell/vorschlag")
+@auth.admin_required
+def admin_schnell_vorschlag():
+    d = request.get_json(silent=True) or {}
+    try:
+        if d.get("annehmen"):
+            schnell.accept_suggestion(str(d.get("satz", "")))
+        else:
+            schnell.dismiss_suggestion(str(d.get("satz", "")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
 @app.get("/api/admin/users")
 @auth.admin_required
 def admin_users():
@@ -321,5 +377,6 @@ if __name__ == "__main__":
         print("\n[AUTH] Es gibt noch keinen Benutzer! Lege zuerst einen Admin an:")
         print("       ~/venv/bin/python3 auth.py anlegen <name> admin\n")
     tts.start()    # Stimme einmal laden, bleibt danach im Speicher
+    tts.prewarm(schnell.prewarm_texts())   # haeufige Saetze vorab erzeugen
     voice.start()  # Wakeword + Spracherkennung im Hintergrund
     app.run(host="0.0.0.0", port=config.WEB_PORT, threaded=True)

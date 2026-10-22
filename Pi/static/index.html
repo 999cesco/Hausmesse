@@ -530,7 +530,7 @@ const DEV_TXT = {
   garage: c => `Garagentor ${c.action === "open" ? "öffnen" : "schließen"}`,
 };
 
-function addMsg(text, who, acts) {
+function addMsg(text, who, acts, info) {
   const log = $("log");
   log.querySelector(".empty")?.remove();
   const m = document.createElement("div");
@@ -541,6 +541,12 @@ function addMsg(text, who, acts) {
     a.className = "acts";
     a.textContent = acts.map(c => (DEV_TXT[c.device] || (() => c.device))(c)).join(" · ");
     m.appendChild(a);
+  }
+  if (info) {
+    const i = document.createElement("span");
+    i.className = "acts";
+    i.textContent = info;
+    m.appendChild(i);
   }
   log.appendChild(m);
   log.scrollTop = log.scrollHeight;
@@ -562,7 +568,9 @@ $("chatForm").addEventListener("submit", async e => {
     });
     const d = await r.json();
     wait.remove();
-    addMsg(d.antwort || d.error || "(keine Antwort)", "bot", d.befehle);
+    const info = d.quelle === "schnell" ? `direkt erkannt · ${d.dauer_ms} ms`
+      : d.quelle === "ki" ? `KI · ${(d.dauer_ms / 1000).toFixed(1).replace(".", ",")} s` : "";
+    addMsg(d.antwort || d.error || "(keine Antwort)", "bot", d.befehle, info);
   } catch {
     wait.remove();
     addMsg("Der Pi antwortet nicht. Läuft app.py noch?", "bot");

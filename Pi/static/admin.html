@@ -120,6 +120,29 @@
   .pwform button { white-space: nowrap; }
   .pwform { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .addform { display: grid; grid-template-columns: 1fr 1.4fr auto auto; gap: 8px; margin-top: 16px; }
+  /* ---------- Schnellerkennung ---------- */
+  section.wide { margin-top: 20px; }
+  .split { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  h3.small { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .testrow { display: flex; gap: 8px; }
+  .testout { margin: 10px 0 0; font-size: 14px; min-height: 1.5em; }
+  .testout .ok { color: var(--ok); } .testout .ki { color: var(--dim); }
+  .testout code { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .patform { display: grid; grid-template-columns: 1.4fr 1.2fr 0.9fr 0.7fr auto; gap: 8px; margin: 10px 0 4px; }
+  @media (max-width: 700px) { .patform { grid-template-columns: 1fr 1fr; } }
+  .hintline { font-size: 12px; color: var(--dim); margin: 0 0 12px; }
+  .pats { max-height: 420px; overflow: auto; border-top: 1px solid var(--line); }
+  .pats td { padding: 6px 0; vertical-align: middle; }
+  .pats td.pat { font-family: var(--mono); font-size: 13px; }
+  .pats td.num { color: var(--dim); text-align: right; padding-right: 12px; font-size: 13px; }
+  .pats tr.off td.pat, .pats tr.off td.act { opacity: .45; }
+  .pats td.ops button { padding: 4px 9px; font-size: 12px; }
+  .sugg { list-style: none; margin: 0; padding: 0; }
+  .sugg li { border-top: 1px solid var(--line); padding: 8px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sugg .s { font-family: var(--mono); font-size: 13px; }
+  .sugg .l { color: var(--dim); font-size: 13px; flex: 1; }
+  .sugg button { padding: 4px 9px; font-size: 12px; }
   @media (max-width: 560px) { .addform { grid-template-columns: 1fr 1fr; } }
 
   .overlay {
@@ -183,6 +206,37 @@
       <div class="msg" id="toolMsg" role="status"></div>
     </section>
   </div>
+  <section class="wide" aria-labelledby="h-fast">
+    <h2 id="h-fast">Schnellerkennung</h2>
+    <p class="sub" id="fastStats">Einfache Befehle erkennt der Pi selbst und schaltet sofort, ohne die KI zu fragen.</p>
+    <div class="split">
+      <div>
+        <h3 class="small">Muster</h3>
+        <p class="hintline"><code>{raum}</code> und <code>{zahl}</code> sind Platzhalter. Füllwörter wie „bitte“, „mach“ oder „das“ ignoriert der Pi von selbst, und ein Muster greift nur, wenn es den ganzen Satz abdeckt.</p>
+        <form class="patform" id="patForm" novalidate>
+          <input type="text" id="patText" placeholder="z. B. licht {raum} an" autocomplete="off" aria-label="Muster">
+          <select id="patAction" aria-label="Aktion"></select>
+          <select id="patRoom" aria-label="Fester Raum (optional)"><option value="">Raum aus dem Satz</option></select>
+          <input type="number" id="patNum" placeholder="Wert" aria-label="Fester Wert (optional)">
+          <button type="submit">Hinzufügen</button>
+        </form>
+        <div class="msg" id="fastMsg" role="status"></div>
+        <div class="pats"><table><tbody id="patList"></tbody></table></div>
+      </div>
+      <div>
+        <h3 class="small">Ausprobieren</h3>
+        <form class="testrow" id="testForm" novalidate>
+          <input type="text" id="testText" placeholder="z. B. Mach bitte das Licht in der Küche an" autocomplete="off" aria-label="Testsatz">
+          <button type="submit">Prüfen</button>
+        </form>
+        <p class="testout" id="testOut" role="status"></p>
+
+        <h3 class="small" style="margin-top:22px">Vorschläge</h3>
+        <p class="hintline">Sätze, die an die KI gingen und nur einen einfachen Befehl ergaben. Übernimmst du sie, erkennt der Pi sie künftig direkt.</p>
+        <ul class="sugg" id="suggList"></ul>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div class="overlay" id="overlay" role="alert">Die Pi-Anwendung startet neu …</div>
@@ -556,11 +610,81 @@ async function restartApp() {
 }
 $("restartBtn").onclick = restartApp;
 
+/* ==================== Schnellerkennung ==================== */
+
+const ROOM_LABELS = { schlafzimmer: "Schlafzimmer", arbeitszimmer: "Arbeitszimmer", wohnzimmer: "Wohnzimmer",
+  kueche: "Küche", garage: "Garage", alle: "überall" };
+let fastData = null;
+
+async function loadFast() {
+  fastData = await api("/api/admin/schnell");
+  const st = fastData.statistik;
+  $("fastStats").textContent = `Einfache Befehle erkennt der Pi selbst und schaltet sofort, ohne die KI zu fragen. `
+    + `Seit dem Start: ${st.direkt} direkt erkannt, ${st.ki} an die KI.`;
+  if (!$("patAction").options.length) {
+    $("patAction").innerHTML = fastData.aktionen.map((a) => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join("");
+    $("patRoom").innerHTML += Object.entries(ROOM_LABELS).map(([k, v]) => `<option value="${k}">fest: ${esc(v)}</option>`).join("");
+  }
+  $("patList").innerHTML = fastData.muster.map((m) => `
+    <tr class="${m.aktiv ? "" : "off"}">
+      <td class="pat">${esc(m.muster)}</td>
+      <td class="act">${esc(m.label)}</td>
+      <td class="num" title="So oft hat das Muster gegriffen">${m.treffer}×</td>
+      <td class="ops">
+        <button type="button" data-toggle="${m.id}" data-aktiv="${m.aktiv ? 0 : 1}">${m.aktiv ? "Pausieren" : "Aktivieren"}</button>
+        <button type="button" class="danger" data-delpat="${m.id}">Löschen</button>
+      </td></tr>`).join("");
+  $("suggList").innerHTML = fastData.vorschlaege.length
+    ? fastData.vorschlaege.map((v) => `<li>
+        <span class="s">${esc(v.satz)}</span><span class="l">→ ${esc(v.label)} · ${v.anzahl}×</span>
+        <button type="button" class="primary" data-accept="${esc(v.satz)}">Übernehmen</button>
+        <button type="button" data-dismiss="${esc(v.satz)}">Verwerfen</button></li>`).join("")
+    : `<li><span class="l">Noch keine Vorschläge.</span></li>`;
+}
+
+$("patForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const werte = {};
+  if ($("patRoom").value) werte.raum = $("patRoom").value;
+  if ($("patNum").value !== "") werte.zahl = String($("patNum").value);
+  try {
+    await post("/api/admin/schnell", { muster: $("patText").value, aktion: $("patAction").value, werte });
+    show($("fastMsg"), "Muster hinzugefügt, es gilt sofort.");
+    $("patText").value = ""; $("patNum").value = ""; $("patRoom").value = "";
+    loadFast();
+  } catch (err) { show($("fastMsg"), err.message, false); }
+});
+
+document.querySelector("section.wide").addEventListener("click", async (e) => {
+  const t = e.target;
+  try {
+    if (t.dataset.toggle) await post(`/api/admin/schnell/${t.dataset.toggle}`, { aktiv: t.dataset.aktiv === "1" });
+    else if (t.dataset.delpat) {
+      if (!confirm("Dieses Muster löschen?")) return;
+      await api(`/api/admin/schnell/${t.dataset.delpat}`, { method: "DELETE" });
+    }
+    else if (t.dataset.accept) await post("/api/admin/schnell/vorschlag", { satz: t.dataset.accept, annehmen: true });
+    else if (t.dataset.dismiss) await post("/api/admin/schnell/vorschlag", { satz: t.dataset.dismiss, annehmen: false });
+    else return;
+    loadFast();
+  } catch (err) { show($("fastMsg"), err.message, false); }
+});
+
+$("testForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const r = await post("/api/admin/schnell/test", { text: $("testText").value });
+  $("testOut").innerHTML = r.direkt
+    ? `<span class="ok">Direkt erkannt:</span> ${esc(r.beschreibung)}${r.rueckfrage ? ` · fragt nach: „${esc(r.rueckfrage)}“` : ""}`
+      + `<br><code>${esc(r.normalisiert)}</code>`
+    : `<span class="ki">Geht an die KI.</span><br><code>${esc(r.normalisiert)}</code>`;
+});
+
 /* ==================== Start ==================== */
 
 loadStatus();
 loadConfig().catch((err) => show($("cfgMsg"), err.message, false));
 loadUsers().catch((err) => show($("userMsg"), err.message, false));
+loadFast().catch((err) => show($("fastMsg"), err.message, false));
 setInterval(loadStatus, 8000);
 </script>
 </body>

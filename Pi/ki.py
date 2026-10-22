@@ -213,6 +213,10 @@ RESPONSE_SCHEMA = {
 _history = deque(maxlen=config.HISTORY_MESSAGES)
 _lock = threading.Lock()
 
+# Wird aufgerufen, wenn die KI einen Satz mit genau EINEM einfachen Befehl geloest hat
+# (die Schnellerkennung sammelt daraus Vorschlaege). Funktionen: f(user_text, befehl)
+SIMPLE_COMMAND_HOOKS = []
+
 
 # -------------------- ESP --------------------
 def get_state():
@@ -550,6 +554,15 @@ def handle(user_text, pruefen=None):
         _history.append({"role": "assistant", "content": json.dumps(
             {**result, "antwort": antwort, "befehle": commands}, ensure_ascii=False)})
 
+        # Einfacher Befehl, sauber ausgefuehrt -> Kandidat fuer die Schnellerkennung
+        if (result.get("art") == "befehl" and len(commands) == 1 and not denied and not ignored
+                and not result.get("szene")):
+            for hook in SIMPLE_COMMAND_HOOKS:
+                try:
+                    hook(user_text, commands[0])
+                except Exception as e:
+                    print(f"[KI] Vorschlag konnte nicht gespeichert werden: {e}")
+
         return {
             "antwort": antwort,
             "art": result.get("art", ""),
@@ -559,6 +572,16 @@ def handle(user_text, pruefen=None):
             "ignoriert": ignored,
             "esp": esp_result,
         }
+
+
+def remember(user_text, antwort, commands):
+    """Traegt einen Befehl, den die Schnellerkennung erledigt hat, in den Gespraechsverlauf ein,
+    damit die KI bei Rueckfragen danach weiss, was passiert ist."""
+    with _lock:
+        _history.append({"role": "user", "content": f"Nutzer: {user_text}"})
+        _history.append({"role": "assistant", "content": json.dumps(
+            {"art": "befehl", "antwort": antwort, "szene": "", "befehle": commands, "rueckfrage": False},
+            ensure_ascii=False)})
 
 
 def reset_history():

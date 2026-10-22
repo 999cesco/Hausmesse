@@ -59,6 +59,14 @@ FIELDS = [
     ("MAX_RECORD_MS", "Längste Aufnahme (ms)", "Sprachsteuerung", "int", {"min": 3000, "max": 30000}, False),
     ("MAX_FOLLOWUPS", "Rückfragen ohne Wakeword", "Sprachsteuerung", "int", {"min": 0, "max": 5}, False),
 
+    ("SCHNELL_AKTIV", "Einfache Befehle direkt erkennen (ohne KI)", "Schnellerkennung", "bool", {}, False),
+    ("SCHNELL_FRAGE_RAUM", "Rückfrage, wenn der Raum fehlt", "Schnellerkennung", "text",
+     {"pattern": r"[\wÄÖÜäöüß ,.?!-]{2,60}"}, False),
+    ("SCHNELL_FRAGE_PROZENT", "Rückfrage beim Dimmen ohne Wert", "Schnellerkennung", "text",
+     {"pattern": r"[\wÄÖÜäöüß ,.?!-]{2,60}"}, False),
+    ("SCHNELL_FRAGE_GRAD", "Rückfrage bei Temperatur ohne Wert", "Schnellerkennung", "text",
+     {"pattern": r"[\wÄÖÜäöüß ,.?!-]{2,60}"}, False),
+
     ("STT_MODE", "Spracherkennung läuft auf", "Spracherkennung", "select",
      {"options": ["server", "local"]}, False),
     ("STT_LOCAL_MODEL", "Modell, wenn auf dem Pi", "Spracherkennung", "select",

@@ -22,6 +22,7 @@ import numpy as np
 
 import config
 import ki
+import schnell
 import stt
 import tts
 
@@ -155,6 +156,9 @@ def _dialog(vad):
         pcm = _record_command(vad)
         if pcm is None:
             print("[VOICE] Nichts gehoert")
+            if schnell.cancel("sprache"):          # offene Rueckfrage ("In welchem Raum?") verwerfen
+                tts.say("Okay, dann nicht.")
+                tts.wait_done()
             return
         _beep(SOUND_END)
 
@@ -171,7 +175,7 @@ def _dialog(vad):
             tts.wait_done()
             return
 
-        result = ki.handle(text)
+        result = schnell.antworte(text, "sprache")   # einfache Befehle direkt, sonst KI
         antwort = result.get("antwort", "")
         last.update(frage=text, antwort=antwort)
 
