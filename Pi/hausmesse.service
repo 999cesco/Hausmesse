@@ -1,0 +1,30 @@
+# Startet die Hausmesse-Anwendung (Dashboard, Sprachsteuerung, KI) automatisch beim Hochfahren
+# und startet sie neu, falls sie abstuerzt.
+#
+# Einrichten (einmalig):
+#   sudo cp /home/admin/Hausmesse/Pi/hausmesse.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hausmesse
+#
+# Bedienen:
+#   sudo systemctl stop hausmesse       anhalten
+#   sudo systemctl start hausmesse      starten
+#   sudo systemctl restart hausmesse    neu starten (z. B. nach git pull)
+#   sudo systemctl disable hausmesse    nicht mehr automatisch starten
+#   journalctl -u hausmesse -f          Ausgaben live ansehen (Strg+C beendet nur die Anzeige)
+
+[Unit]
+Description=Hausmesse Smarthome (Dashboard, Sprachsteuerung, KI)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/Hausmesse/Pi
+ExecStart=/home/admin/venv/bin/python3 app.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
