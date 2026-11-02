@@ -1,0 +1,27 @@
+# KI-Training als Dienst auf dem Server (siehe trainingsdienst.py)
+#
+# Einrichten:
+#   sed "s/BENUTZER/$USER/g" ~/Hausmesse/server/hausmesse-training.service | sudo tee /etc/systemd/system/hausmesse-training.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hausmesse-training
+# Log ansehen:  journalctl -u hausmesse-training -f --output=cat
+
+[Unit]
+Description=Hausmesse KI-Training
+After=network-online.target ollama.service wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+User=BENUTZER
+WorkingDirectory=/home/BENUTZER/Hausmesse/server
+ExecStart=/home/BENUTZER/hausmesse-venv/bin/python3 trainingsdienst.py
+Environment=TRAINING_HOST=192.168.95.1
+Environment=TRAINING_PORT=9100
+Environment=OLLAMA_URL=http://192.168.95.1:11434/api/chat
+Environment=OLLAMA_MODEL=llama3.1:8b
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

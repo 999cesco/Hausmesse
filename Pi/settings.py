@@ -67,6 +67,9 @@ FIELDS = [
     ("SCHNELL_FRAGE_GRAD", "Rückfrage bei Temperatur ohne Wert", "Schnellerkennung", "text",
      {"pattern": r"[\wÄÖÜäöüß ,.?!-]{2,60}"}, False),
 
+    ("TRAINING_URL", "Trainingsdienst auf dem Server (leer = auf dem Pi)", "Verbindungen", "text",
+     {"pattern": r"(https?://[A-Za-z0-9.\-]+(:\d{1,5})?)?"}, False),
+
     ("STT_MODE", "Spracherkennung läuft auf", "Spracherkennung", "select",
      {"options": ["server", "local"]}, False),
     ("STT_LOCAL_MODEL", "Modell, wenn auf dem Pi", "Spracherkennung", "select",

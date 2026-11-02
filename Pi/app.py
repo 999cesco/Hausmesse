@@ -23,6 +23,7 @@ import config
 import ki
 import rechte
 import schnell
+import training_fern
 import settings
 import status_info
 import tts
@@ -262,6 +263,69 @@ def admin_tts_test():
     return jsonify({"ok": True})
 
 
+# ---------- KI-Training ----------
+
+@app.get("/api/admin/training")
+@auth.admin_required
+def admin_training():
+    return jsonify(training_fern.status())
+
+
+@app.post("/api/admin/training/start")
+@auth.admin_required
+def admin_training_start():
+    d = request.get_json(silent=True) or {}
+    try:
+        runden = max(1, min(30, int(d.get("runden", 10))))
+        training_fern.start(bool(d.get("nur_testen")), runden)
+    except (ValueError, OSError, requests.RequestException) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/training/stop")
+@auth.admin_required
+def admin_training_stop():
+    try:
+        training_fern.stop()
+    except (ValueError, requests.RequestException) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/training/kandidat")
+@auth.admin_required
+def admin_training_kandidat():
+    try:
+        training_fern.kandidat(bool((request.get_json(silent=True) or {}).get("annehmen")))
+    except (ValueError, requests.RequestException) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/training/zuruecksetzen")
+@auth.admin_required
+def admin_training_reset():
+    if training_fern.busy():
+        return jsonify({"error": "Erst das laufende Training stoppen."}), 409
+    try:
+        training_fern.zuruecksetzen()
+    except (ValueError, requests.RequestException) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/training/einstellungen")
+@auth.admin_required
+def admin_training_settings():
+    d = request.get_json(silent=True) or {}
+    try:
+        training_fern.einstellungen({k: d[k] for k in ("auto", "pause_min", "runden") if k in d})
+    except (ValueError, TypeError, requests.RequestException) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
 # ---------- Schnellerkennung ----------
 
 @app.get("/api/admin/schnell")
@@ -379,4 +443,5 @@ if __name__ == "__main__":
     tts.start()    # Stimme einmal laden, bleibt danach im Speicher
     tts.prewarm(schnell.prewarm_texts())   # haeufige Saetze vorab erzeugen
     voice.start()  # Wakeword + Spracherkennung im Hintergrund
+    training_fern.start_herzschlag()   # meldet sich beim Trainingsdienst auf dem Server
     app.run(host="0.0.0.0", port=config.WEB_PORT, threaded=True)

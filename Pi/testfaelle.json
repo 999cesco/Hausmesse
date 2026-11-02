@@ -1,0 +1,704 @@
+{
+ "_info": "Testfaelle fuer das KI-Training. Erwartungen: art (erlaubte Arten), keine_befehle, befehle (alle muessen vorkommen), irgendein (mindestens einer), nicht (darf nicht vorkommen), szene, enthaelt (eins der Woerter in der Antwort), regex, min_laenge, rueckfrage. Jeder 4. Fall ist automatisch Kontrolle, oder gruppe: training/kontrolle setzen.",
+ "zustaende": {
+  "normal": {
+   "sensors": {
+    "temperature": 21.5,
+    "humidity": 48,
+    "soilPercent": 60
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 0,
+    "wohnzimmer": 80,
+    "kueche": 0,
+    "garage": 0
+   },
+   "heating": {
+    "on": false,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "closed",
+   "windows": {
+    "wohnzimmer": "closed",
+    "schlafzimmer": "closed",
+    "kueche": "closed"
+   }
+  },
+  "kalt_fenster": {
+   "sensors": {
+    "temperature": 18.0,
+    "humidity": 48,
+    "soilPercent": 60
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 0,
+    "wohnzimmer": 0,
+    "kueche": 0,
+    "garage": 0
+   },
+   "heating": {
+    "on": false,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "closed",
+   "windows": {
+    "wohnzimmer": "open",
+    "schlafzimmer": "closed",
+    "kueche": "closed"
+   }
+  },
+  "warm": {
+   "sensors": {
+    "temperature": 27.0,
+    "humidity": 48,
+    "soilPercent": 60
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 0,
+    "wohnzimmer": 80,
+    "kueche": 0,
+    "garage": 0
+   },
+   "heating": {
+    "on": false,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "closed",
+   "windows": {
+    "wohnzimmer": "closed",
+    "schlafzimmer": "closed",
+    "kueche": "closed"
+   }
+  },
+  "trocken": {
+   "sensors": {
+    "temperature": 21.5,
+    "humidity": 48,
+    "soilPercent": 12
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 0,
+    "wohnzimmer": 0,
+    "kueche": 0,
+    "garage": 0
+   },
+   "heating": {
+    "on": false,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "closed",
+   "windows": {
+    "wohnzimmer": "closed",
+    "schlafzimmer": "closed",
+    "kueche": "closed"
+   }
+  },
+  "feucht": {
+   "sensors": {
+    "temperature": 21.5,
+    "humidity": 48,
+    "soilPercent": 70
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 0,
+    "wohnzimmer": 0,
+    "kueche": 0,
+    "garage": 0
+   },
+   "heating": {
+    "on": false,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "closed",
+   "windows": {
+    "wohnzimmer": "closed",
+    "schlafzimmer": "closed",
+    "kueche": "closed"
+   }
+  },
+  "abend": {
+   "sensors": {
+    "temperature": 21.5,
+    "humidity": 48,
+    "soilPercent": 60
+   },
+   "lights": {
+    "schlafzimmer": 0,
+    "arbeitszimmer": 40,
+    "wohnzimmer": 100,
+    "kueche": 60,
+    "garage": 0
+   },
+   "heating": {
+    "on": true,
+    "target": 21,
+    "active": false
+   },
+   "cooling": {
+    "on": false,
+    "target": 24,
+    "active": false
+   },
+   "fan": {
+    "on": false,
+    "mode": "auto"
+   },
+   "garage": "open",
+   "windows": {
+    "wohnzimmer": "closed",
+    "schlafzimmer": "open",
+    "kueche": "closed"
+   }
+  }
+ },
+ "faelle": [
+  {
+   "text": "Mach das Licht im Arbeitszimmer an",
+   "zustand": "normal",
+   "erwartet": {
+    "art": [
+     "befehl"
+    ],
+    "befehle": [
+     {
+      "device": "light",
+      "room": "arbeitszimmer",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "text": "Garage auf",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "garage",
+      "action": "open"
+     }
+    ]
+   }
+  },
+  {
+   "text": "Dimm das Schlafzimmer auf 30 Prozent",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "light",
+      "room": "schlafzimmer",
+      "action": "set",
+      "value": 30
+     }
+    ]
+   }
+  },
+  {
+   "text": "Stell die Heizung auf 23 Grad",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "heating",
+      "action": [
+       "set",
+       "on"
+      ],
+      "value": 23
+     }
+    ]
+   }
+  },
+  {
+   "text": "Schalt die Klimaanlage aus",
+   "zustand": "warm",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "cooling",
+      "action": "off"
+     }
+    ]
+   }
+  },
+  {
+   "text": "Lüfter an",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "fan",
+      "action": "on"
+     }
+    ]
+   }
+  },
+  {
+   "text": "Mach überall das Licht aus",
+   "zustand": "abend",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "light",
+      "room": "alle",
+      "action": "off"
+     }
+    ]
+   }
+  },
+  {
+   "text": "Garage zumachen bitte",
+   "zustand": "abend",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "garage",
+      "action": "close"
+     }
+    ]
+   }
+  },
+  {
+   "text": "Wie warm ist es gerade?",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "21"
+    ]
+   }
+  },
+  {
+   "text": "Ist die Garage zu?",
+   "zustand": "abend",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "offen",
+     "auf",
+     "nicht zu",
+     "nicht geschlossen"
+    ]
+   }
+  },
+  {
+   "text": "Ist im Wohnzimmer Licht an?",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "ja",
+     "an",
+     "80"
+    ]
+   }
+  },
+  {
+   "text": "Muss ich meine Pflanze gießen?",
+   "zustand": "trocken",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "ja",
+     "gieß",
+     "trocken"
+    ]
+   }
+  },
+  {
+   "text": "Muss ich meine Pflanze gießen?",
+   "zustand": "feucht",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "nein",
+     "feucht",
+     "nicht"
+    ]
+   }
+  },
+  {
+   "text": "Wie viel Kratz hat es im Haus?",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "21"
+    ]
+   }
+  },
+  {
+   "text": "Mir ist kalt",
+   "zustand": "kalt_fenster",
+   "erwartet": {
+    "irgendein": [
+     {
+      "device": "heating",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ],
+    "nicht": [
+     {
+      "device": "cooling",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ],
+    "enthaelt": [
+     "fenster"
+    ]
+   }
+  },
+  {
+   "text": "Mir ist viel zu warm",
+   "zustand": "warm",
+   "erwartet": {
+    "irgendein": [
+     {
+      "device": "cooling",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ],
+    "nicht": [
+     {
+      "device": "heating",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "text": "Ich gehe jetzt schlafen",
+   "zustand": "abend",
+   "erwartet": {
+    "szene": "gute_nacht"
+   }
+  },
+  {
+   "text": "Ich verlasse jetzt das Haus",
+   "zustand": "abend",
+   "erwartet": {
+    "irgendein": [
+     {
+      "device": "light",
+      "action": "off"
+     },
+     {
+      "device": "light",
+      "action": "set",
+      "value": 0
+     }
+    ]
+   }
+  },
+  {
+   "text": "Mach alle Lichter an und sag mir wie warm es ist",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "light",
+      "room": "alle",
+      "action": "on"
+     }
+    ],
+    "enthaelt": [
+     "21"
+    ]
+   }
+  },
+  {
+   "text": "Mach alles an, danach ennne mir die top 3 käse sortem",
+   "zustand": "normal",
+   "erwartet": {
+    "irgendein": [
+     {
+      "device": "light",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ],
+    "enthaelt": [
+     "gouda",
+     "emmentaler",
+     "camembert",
+     "brie",
+     "parmesan",
+     "cheddar",
+     "edamer",
+     "gorgonzola",
+     "bergkäse",
+     "mozzarella",
+     "roquefort",
+     "appenzeller",
+     "tilsiter",
+     "feta"
+    ]
+   }
+  },
+  {
+   "text": "Muss ich gießen? Wenn ja, mach das Licht im Arbeitszimmer an",
+   "zustand": "trocken",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "light",
+      "room": "arbeitszimmer",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "text": "Muss ich gießen? Wenn ja, mach das Licht im Arbeitszimmer an",
+   "zustand": "feucht",
+   "erwartet": {
+    "keine_befehle": true
+   }
+  },
+  {
+   "text": "Wenn es wärmer als 25 Grad ist, mach die Klimaanlage an",
+   "zustand": "warm",
+   "erwartet": {
+    "irgendein": [
+     {
+      "device": "cooling",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "text": "Wenn es wärmer als 25 Grad ist, mach die Klimaanlage an",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true
+   }
+  },
+  {
+   "text": "Wie hoch ist der Mount Everest?",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "regex": "88[45]\\d|8\\.8[45]\\d"
+   }
+  },
+  {
+   "text": "Buchstabiere Apfel",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "regex": "A\\W+P\\W+F\\W+E\\W+L"
+   }
+  },
+  {
+   "text": "Nenn mir drei Käsesorten",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "gouda",
+     "emmentaler",
+     "camembert",
+     "brie",
+     "parmesan",
+     "cheddar",
+     "edamer",
+     "gorgonzola",
+     "bergkäse",
+     "mozzarella",
+     "roquefort",
+     "appenzeller",
+     "tilsiter",
+     "feta"
+    ]
+   }
+  },
+  {
+   "text": "Was ist die Hauptstadt von Frankreich?",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "paris"
+    ]
+   }
+  },
+  {
+   "text": "Erzähl mir einen kurzen Witz",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true,
+    "min_laenge": 25
+   }
+  },
+  {
+   "text": "Danke dir",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true
+   }
+  },
+  {
+   "text": "Mach das Licht im Badezimmer an",
+   "zustand": "normal",
+   "erwartet": {
+    "keine_befehle": true
+   }
+  },
+  {
+   "text": "Mach das Kühnen Licht an",
+   "zustand": "normal",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "light",
+      "room": "kueche",
+      "action": [
+       "on",
+       "set"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "text": "Ja, bitte",
+   "zustand": "abend",
+   "erwartet": {
+    "befehle": [
+     {
+      "device": "garage",
+      "action": "close"
+     }
+    ]
+   },
+   "verlauf": [
+    {
+     "nutzer": "Ich gehe jetzt schlafen",
+     "art": "situation",
+     "rueckfrage": true,
+     "antwort": "Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Gute Nacht! Das Garagentor ist noch offen. Soll ich es schließen?",
+     "befehle": []
+    }
+   ]
+  },
+  {
+   "text": "Nein, lass offen",
+   "zustand": "abend",
+   "erwartet": {
+    "keine_befehle": true
+   },
+   "verlauf": [
+    {
+     "nutzer": "Ich gehe jetzt schlafen",
+     "art": "situation",
+     "rueckfrage": true,
+     "antwort": "Ich habe alle Lichter ausgeschaltet, das Schlafzimmer auf 20 Prozent gedimmt und die Heizung auf 18 Grad gestellt. Gute Nacht! Das Garagentor ist noch offen. Soll ich es schließen?",
+     "befehle": []
+    }
+   ]
+  },
+  {
+   "text": "Ist das nicht zu wenig?",
+   "zustand": "feucht",
+   "erwartet": {
+    "keine_befehle": true,
+    "enthaelt": [
+     "nein",
+     "gut",
+     "richtig",
+     "genug",
+     "feucht",
+     "passt"
+    ]
+   },
+   "verlauf": [
+    {
+     "nutzer": "Muss ich meine Pflanze gießen?",
+     "art": "statusfrage",
+     "antwort": "Nein, die Erde ist mit 70 Prozent noch gut feucht.",
+     "befehle": []
+    }
+   ]
+  }
+ ]
+}

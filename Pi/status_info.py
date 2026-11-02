@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 import config
+import training_fern
 import tts
 import voice
 
@@ -136,6 +137,7 @@ def all_status():
     return {
         **results,
         "tts": {"aktiv": config.TTS_ENABLED, "bereit": tts.is_ready()},
+        "training": training_fern.busy(),
         "sprache": {"aktiv": config.VOICE_ENABLED, "status": voice.status, "stumm": voice.is_muted(),
                     "wakeword": (config.PORCUPINE_KEYWORD.rsplit("/", 1)[-1]
                                  if getattr(config, "WAKEWORD_ENGINE", "") == "porcupine"

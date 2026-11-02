@@ -9,6 +9,7 @@ Aufgabenteilung:
 """
 
 import json
+import os
 import re
 import threading
 from collections import deque
@@ -196,6 +197,24 @@ Nutzer: Wie hoch ist der Mount Everest?
 """
 
 # JSON-Schema: zwingt das Modell in genau dieses Antwortformat
+# Zusatzregeln aus dem KI-Training (Admin-Bereich). Liegen in prompt_zusatz.txt (von Git ignoriert)
+# und werden an den Systemprompt angehaengt. Fehlt die Datei, gilt nur der Prompt oben.
+ZUSATZ_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompt_zusatz.txt")
+
+
+def load_zusatz():
+    try:
+        with open(ZUSATZ_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+
+def build_prompt(zusatz=None):
+    zusatz = load_zusatz() if zusatz is None else zusatz.strip()
+    return SYSTEM_PROMPT + (f"\n\nZUSATZREGELN (haben Vorrang)\n{zusatz}" if zusatz else "")
+
+
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -449,7 +468,7 @@ def find_hints(s):
 
 
 # -------------------- Ollama --------------------
-def _ask_model(user_text, state):
+def _ask_model(user_text, state, history=None, prompt=None, seed=None):
     hints = find_hints(state)
     d = datetime.now()
     weekday = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][d.weekday()]
@@ -460,8 +479,12 @@ def _ask_model(user_text, state):
         f"HINWEISE\n{chr(10).join(hints) if hints else 'keine'}\n\n"
         f"Nutzer: {user_text}"
     )
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *list(_history),
+    messages = [{"role": "system", "content": prompt or build_prompt()},
+                *list(_history if history is None else history),
                 {"role": "user", "content": content}]
+    options = {"temperature": 0.2, "num_ctx": 8192}       # genug Kontext fuer Prompt + Verlauf
+    if seed is not None:
+        options["seed"] = seed                              # Tests: gleiche Frage -> gleiche Antwort
 
     r = requests.post(config.OLLAMA_URL, json={
         "model": config.MODEL,
@@ -469,11 +492,76 @@ def _ask_model(user_text, state):
         "format": RESPONSE_SCHEMA,
         "stream": False,
         "keep_alive": "30m",                  # Modell im Speicher halten -> schnellere Antworten
-        "options": {"temperature": 0.2, "num_ctx": 8192},  # genug Kontext fuer Prompt + Verlauf
-    }, timeout=120, **config.server_args())
+        "options": options,
+    }, timeout=180, **config.server_args())
     r.raise_for_status()
     raw = r.json()["message"]["content"]
     return raw, json.loads(raw)
+
+
+def interpret(result, pruefen=None):
+    """Macht aus der Modellantwort die endgueltige Antwort und Befehlsliste - ohne etwas zu schalten.
+    Wird vom echten Betrieb (handle) und vom KI-Training genutzt."""
+    result = dict(result)
+    # Szene zuerst, danach Einzelbefehle (die koennen die Szene ergaenzen)
+    commands = list(SCENES.get(result.get("szene", ""), []))
+    ignored = []
+    for c in result.get("befehle", []):
+        v = validate(c)
+        if v:
+            commands.append(v)
+        else:
+            ignored.append(c)
+
+    # Fragen schalten nie etwas - auch wenn das Modell trotzdem Befehle mitschickt
+    if result.get("art") in ("statusfrage", "wissen") and (commands or result.get("szene")):
+        ignored += commands
+        commands = []
+        result["szene"] = ""
+
+    # Rechte des Nutzers: Verbotenes wird nicht ausgefuehrt
+    denied, deny_msg = [], ""
+    if pruefen and commands:
+        commands, denied, deny_msg = pruefen(commands)
+
+    art = result.get("art", "")
+    szene = result.get("szene", "")
+    antwort = strip_action_claims(result.get("antwort", ""))
+    rueckfrage = bool(result.get("rueckfrage", False))
+
+    # Ansage, was geschaltet wurde - kommt IMMER vom Code, damit sie zur Wirklichkeit passt
+    if commands:
+        extra = commands[len(SCENES[szene]):] if szene in SCENE_TEXT and not denied else commands
+        if szene in SCENE_TEXT and not denied:
+            action_txt = (SCENE_TEXT[szene] + " " + confirm(extra)).strip() if extra else SCENE_TEXT[szene]
+        else:
+            action_txt = confirm(commands)
+        text = "" if art == "befehl" else antwort
+        antwort = f"{action_txt} {text}".strip()
+        if art == "befehl":
+            rueckfrage = False
+    # Nichts davon durfte der Nutzer -> ehrlich sagen statt die KI-Antwort vorzulesen
+    elif denied:
+        rest = antwort if art == "gemischt" else ""
+        antwort = f"{deny_msg} {rest}".strip()
+        rueckfrage = False
+    # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
+    elif ignored and art in ("befehl", "gemischt", "situation"):
+        hinweis = "Das Schalten konnte ich leider nicht ausführen."
+        antwort = hinweis if art == "befehl" or not antwort else f"{hinweis} {antwort}"
+        rueckfrage = False
+
+    if denied and commands and deny_msg:
+        antwort = f"{antwort} {deny_msg}".strip()
+    return {"antwort": antwort, "art": art, "szene": result.get("szene", ""), "rueckfrage": rueckfrage,
+            "befehle": commands, "ignoriert": ignored, "verweigert": denied, "roh": result}
+
+
+def history_entries(user_text, out):
+    """Die zwei Eintraege, die nach einer Antwort in den Gespraechsverlauf kommen."""
+    return [{"role": "user", "content": f"Nutzer: {user_text}"},
+            {"role": "assistant", "content": json.dumps(
+                {**out["roh"], "antwort": out["antwort"], "befehle": out["befehle"]}, ensure_ascii=False)}]
 
 
 def handle(user_text, pruefen=None):
@@ -491,27 +579,8 @@ def handle(user_text, pruefen=None):
         except (requests.RequestException, ValueError, KeyError):
             return {"antwort": "Der KI-Server antwortet gerade nicht.", "befehle": [], "fehler": "ki"}
 
-        # Szene zuerst, danach Einzelbefehle (die koennen die Szene ergaenzen)
-        commands = list(SCENES.get(result.get("szene", ""), []))
-        ignored = []
-        for c in result.get("befehle", []):
-            v = validate(c)
-            if v:
-                commands.append(v)
-            else:
-                ignored.append(c)
-
-        # Fragen schalten nie etwas - auch wenn das Modell trotzdem Befehle mitschickt
-        if result.get("art") in ("statusfrage", "wissen") and (commands or result.get("szene")):
-            ignored += commands
-            commands = []
-            result["szene"] = ""
-            print("[KI] Frage erkannt -> Befehle verworfen")
-
-        # Rechte des Nutzers: Verbotenes wird nicht ausgefuehrt
-        denied, deny_msg = [], ""
-        if pruefen and commands:
-            commands, denied, deny_msg = pruefen(commands)
+        out = interpret(result, pruefen)
+        commands, ignored, denied = out["befehle"], out["ignoriert"], out["verweigert"]
 
         esp_result = None
         if commands:
@@ -519,36 +588,7 @@ def handle(user_text, pruefen=None):
                 esp_result = send_commands(commands)
             except (requests.RequestException, ValueError):
                 esp_result = {"status": "error", "error": "ESP nicht erreichbar"}
-
-        art = result.get("art", "")
-        szene = result.get("szene", "")
-        antwort = strip_action_claims(result.get("antwort", ""))
-        rueckfrage = bool(result.get("rueckfrage", False))
-
-        # Ansage, was geschaltet wurde - kommt IMMER vom Code, damit sie zur Wirklichkeit passt
-        if commands:
-            extra = commands[len(SCENES[szene]):] if szene in SCENE_TEXT and not denied else commands
-            if szene in SCENE_TEXT and not denied:
-                action_txt = (SCENE_TEXT[szene] + " " + confirm(extra)).strip() if extra else SCENE_TEXT[szene]
-            else:
-                action_txt = confirm(commands)
-            text = "" if art == "befehl" else antwort
-            antwort = f"{action_txt} {text}".strip()
-            if art == "befehl":
-                rueckfrage = False
-        # Nichts davon durfte der Nutzer -> ehrlich sagen statt die KI-Antwort vorzulesen
-        elif denied:
-            rest = antwort if art == "gemischt" else ""
-            antwort = f"{deny_msg} {rest}".strip()
-            rueckfrage = False
-        # Die KI wollte etwas schalten, aber nichts davon war gueltig -> nicht luegen
-        elif ignored and art in ("befehl", "gemischt", "situation"):
-            hinweis = "Das Schalten konnte ich leider nicht ausführen."
-            antwort = hinweis if art == "befehl" or not antwort else f"{hinweis} {antwort}"
-            rueckfrage = False
-
-        if denied and commands and deny_msg:
-            antwort = f"{antwort} {deny_msg}".strip()
+        antwort, rueckfrage = out["antwort"], out["rueckfrage"]
         if esp_result and esp_result.get("status") == "error":
             antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
 
@@ -559,15 +599,13 @@ def handle(user_text, pruefen=None):
               + (f"  NICHT ERLAUBT: {denied}" if denied else ""))
         print(f"[KI] ESP:      {esp_result}")
 
-        # Verlauf merken (ohne den langen Zustand), damit Rueckfragen wie "ja" funktionieren
-        _history.append({"role": "user", "content": f"Nutzer: {user_text}"})
-        # Im Verlauf steht, was wirklich gesagt und getan wurde - nicht der Entwurf des Modells
-        _history.append({"role": "assistant", "content": json.dumps(
-            {**result, "antwort": antwort, "befehle": commands}, ensure_ascii=False)})
+        # Verlauf merken (ohne den langen Zustand), damit Rueckfragen wie "ja" funktionieren.
+        # Dort steht, was wirklich gesagt und getan wurde - nicht der Entwurf des Modells.
+        _history.extend(history_entries(user_text, {**out, "antwort": antwort}))
 
         # Einfacher Befehl, sauber ausgefuehrt -> Kandidat fuer die Schnellerkennung
-        if (result.get("art") == "befehl" and len(commands) == 1 and not denied and not ignored
-                and not result.get("szene")):
+        if (out["art"] == "befehl" and len(commands) == 1 and not denied and not ignored
+                and not out["szene"]):
             for hook in SIMPLE_COMMAND_HOOKS:
                 try:
                     hook(user_text, commands[0])
@@ -576,9 +614,9 @@ def handle(user_text, pruefen=None):
 
         return {
             "antwort": antwort,
-            "art": result.get("art", ""),
+            "art": out["art"],
             "rueckfrage": rueckfrage,
-            "szene": result.get("szene", ""),
+            "szene": out["szene"],
             "befehle": commands,
             "ignoriert": ignored,
             "esp": esp_result,

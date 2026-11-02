@@ -120,6 +120,21 @@
   .pwform button { white-space: nowrap; }
   .pwform { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .addform { display: grid; grid-template-columns: 1fr 1.4fr auto auto; gap: 8px; margin-top: 16px; }
+  /* ---------- KI-Training ---------- */
+  .trbar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 10px 0 4px; }
+  .trbar > div { height: 100%; background: var(--lamp); width: 0; transition: width .4s; }
+  .score { font-family: var(--mono); font-size: 13px; }
+  .score b { font-size: 18px; color: var(--text); }
+  .fails { list-style: none; padding: 0; margin: 8px 0 0; max-height: 260px; overflow: auto; }
+  .fails li { border-top: 1px solid var(--line); padding: 6px 0; font-size: 13px; }
+  .fails .t { font-family: var(--mono); }
+  .fails .g { color: var(--heat); display: block; }
+  .fails .k { color: var(--dim); font-size: 11px; margin-left: 6px; }
+  pre.rules { background: var(--inset); border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    font: 12px/1.5 var(--mono); white-space: pre-wrap; margin: 6px 0 10px; max-height: 220px; overflow: auto; }
+  .trlog { font: 12px/1.6 var(--mono); color: var(--dim); max-height: 200px; overflow: auto; margin: 6px 0 0; }
+  .rounds { width: 70px; display: inline-block; }
+
   /* ---------- Schnellerkennung ---------- */
   section.wide { margin-top: 20px; }
   .split { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
@@ -206,6 +221,55 @@
       <div class="msg" id="toolMsg" role="status"></div>
     </section>
   </div>
+  <section class="wide" aria-labelledby="h-train" id="trainSec">
+    <h2 id="h-train">KI-Training</h2>
+    <p class="sub">Das Training läuft auf dem Server. Es schickt die Testsätze an die KI, lässt sie aus Fehlern bessere Zusatzregeln vorschlagen und behält nur Vorschläge, bei denen mehr Tests bestehen und keiner kaputtgeht. Während es läuft, beantwortet die KI keine Fragen; einfache Befehle der Schnellerkennung funktionieren weiter.</p>
+    <div class="split">
+      <div>
+        <div class="actions">
+          <button type="button" id="trTest">Nur testen</button>
+          <label>Runden <input type="number" id="trRounds" class="rounds" min="1" max="30" value="10"></label>
+          <button type="button" class="primary" id="trStart">Training starten</button>
+          <button type="button" class="danger" id="trStop" hidden>Stoppen</button>
+        </div>
+        <p class="score" id="trState" style="margin:12px 0 0">Bereit.</p>
+        <p class="hint" id="trWarn" hidden style="margin-left:0"></p>
+        <div class="trbar" id="trBarWrap" hidden><div id="trBar"></div></div>
+        <div class="msg" id="trMsg" role="status"></div>
+        <h3 class="small" style="margin-top:18px">Ergebnis mit den aktuellen Regeln</h3>
+        <p class="score" id="trLive">Noch nicht getestet.</p>
+        <ul class="fails" id="trFails"></ul>
+      </div>
+      <div>
+        <div id="trCand" hidden>
+          <h3 class="small">Neuer Vorschlag</h3>
+          <p class="score" id="trCandScore"></p>
+          <pre class="rules" id="trCandRules"></pre>
+          <div class="actions">
+            <button type="button" class="primary" id="trAccept">Übernehmen</button>
+            <button type="button" id="trDiscard">Verwerfen</button>
+          </div>
+        </div>
+        <div id="trAuto" hidden>
+          <h3 class="small">Automatik auf dem Server</h3>
+          <p class="hintline">Ist der Pi eine Weile aus, trainiert der Server von selbst weiter. Sobald der Pi wieder an ist, hält er an.</p>
+          <div class="actions">
+            <label class="check"><input type="checkbox" id="trAutoOn"> automatisch trainieren</label>
+            <label>nach <input type="number" id="trAutoMin" class="rounds" min="2" max="240"> Min. ohne Pi</label>
+            <label><input type="number" id="trAutoRounds" class="rounds" min="1" max="30"> Runden</label>
+            <button type="button" id="trAutoSave">Speichern</button>
+          </div>
+          <p class="hintline" id="trPi" style="margin-top:8px"></p>
+        </div>
+        <h3 class="small" style="margin-top:14px">Aktuelle Zusatzregeln (live)</h3>
+        <pre class="rules" id="trRules">keine</pre>
+        <button type="button" id="trReset">Zusatzregeln löschen</button>
+        <h3 class="small" style="margin-top:18px">Protokoll</h3>
+        <div class="trlog" id="trLog"></div>
+      </div>
+    </div>
+  </section>
+
   <section class="wide" aria-labelledby="h-fast">
     <h2 id="h-fast">Schnellerkennung</h2>
     <p class="sub" id="fastStats">Einfache Befehle erkennt der Pi selbst und schaltet sofort, ohne die KI zu fragen.</p>
@@ -347,6 +411,7 @@ function renderStatus(s) {
       ["Wakeword", v.wakeword], ["Zuletzt gehört", v.frage], ["Zuletzt geantwortet", v.antwort],
     ]));
 
+  if (s.training) html.push(comp("KI-Training", "warn", "läuft", [], [["Die KI beantwortet gerade keine Fragen.", ""]]));
   $("status").innerHTML = html.join("");
   $("updated").textContent = "Aktualisiert um " + new Date().toLocaleTimeString("de-DE");
 }
@@ -610,6 +675,64 @@ async function restartApp() {
 }
 $("restartBtn").onclick = restartApp;
 
+/* ==================== KI-Training ==================== */
+
+const scoreTxt = (r) => r ? `<b>${r.gesamt[0]}/${r.gesamt[1]}</b> bestanden · Training ${r.training[0]}/${r.training[1]}`
+  + ` · Kontrolle ${r.kontrolle[0]}/${r.kontrolle[1]} · ${esc(r.zeit)}, ${r.dauer_s} s` : "Noch nicht getestet.";
+let trTimer = null;
+
+async function loadTraining() {
+  const t = await api("/api/admin/training");
+  $("trTest").disabled = $("trStart").disabled = t.laeuft;
+  $("trStop").hidden = !t.laeuft;
+  $("trBarWrap").hidden = !t.laeuft;
+  const warn = [];
+  if (t.nicht_erreichbar) warn.push("Der Trainingsdienst auf dem Server ist nicht erreichbar. Läuft er, und steht das VPN?");
+  if (t.server && t.gleicher_stand === false) warn.push("Der Server hat einen anderen Programmstand als der Pi. Dort git pull ausführen und den Trainingsdienst neu starten.");
+  $("trWarn").hidden = !warn.length; $("trWarn").textContent = warn.join(" ");
+  $("trAuto").hidden = !t.server;
+  if (t.server && document.activeElement?.closest("#trAuto") == null) {
+    $("trAutoOn").checked = t.auto; $("trAutoMin").value = t.pause_min; $("trAutoRounds").value = t.auto_runden;
+    $("trPi").textContent = t.pi_aktiv ? "Der Pi meldet sich gerade, die Automatik wartet." : "Der Pi meldet sich gerade nicht.";
+  }
+  if (t.laeuft) {
+    const wer = t.quelle === "automatisch" ? " (automatisch)" : "";
+    const what = t.modus === "test" ? "Test läuft" + wer : `Training läuft${wer} · Runde ${t.runde || "0 (Ausgangstest)"} von ${t.runden}`;
+    $("trState").innerHTML = `${what} · Satz ${t.fall} von ${t.faelle} · seit ${Math.floor(t.seit_s / 60)} min`;
+    $("trBar").style.width = (t.faelle ? 100 * t.fall / t.faelle : 0) + "%";
+  } else {
+    $("trState").textContent = t.fehler ? "Abgebrochen: " + t.fehler : "Bereit.";
+  }
+  $("trLive").innerHTML = scoreTxt(t.live);
+  $("trFails").innerHTML = (t.live?.fehler || []).map((f) => `<li><span class="t">${esc(f.text)}</span>
+    <span class="k">${f.gruppe === "kontrolle" ? "Kontrolle" : ""}</span><span class="g">${esc(f.grund)}</span></li>`).join("");
+  $("trRules").textContent = t.live_zusatz || "keine";
+  $("trCand").hidden = !t.kandidat;
+  if (t.kandidat) {
+    $("trCandScore").innerHTML = scoreTxt(t.kandidat.ergebnis);
+    $("trCandRules").textContent = t.kandidat.zusatz;
+  }
+  $("trLog").innerHTML = t.log.slice().reverse().map(esc).join("<br>");
+  clearTimeout(trTimer);
+  trTimer = setTimeout(() => loadTraining().catch(() => {}), t.laeuft ? 2000 : 10000);
+}
+
+async function trAction(path, body, okText) {
+  try { await post(path, body); if (okText) show($("trMsg"), okText); loadTraining(); }
+  catch (err) { show($("trMsg"), err.message, false); }
+}
+$("trTest").onclick = () => trAction("/api/admin/training/start", { nur_testen: true }, "Test gestartet.");
+$("trStart").onclick = () => trAction("/api/admin/training/start", { runden: Number($("trRounds").value) },
+  "Training gestartet. Die KI ist jetzt für Nutzer gesperrt, bis es fertig ist.");
+$("trStop").onclick = () => trAction("/api/admin/training/stop", {}, "Wird nach dem aktuellen Satz gestoppt.");
+$("trAccept").onclick = () => trAction("/api/admin/training/kandidat", { annehmen: true }, "Neue Regeln sind jetzt live.");
+$("trDiscard").onclick = () => trAction("/api/admin/training/kandidat", { annehmen: false }, "Vorschlag verworfen.");
+$("trAutoSave").onclick = () => trAction("/api/admin/training/einstellungen", {
+  auto: $("trAutoOn").checked, pause_min: Number($("trAutoMin").value), runden: Number($("trAutoRounds").value) },
+  "Automatik gespeichert.");
+$("trReset").onclick = () => confirm("Alle Zusatzregeln löschen? Dann gilt nur noch der Grundprompt.")
+  && trAction("/api/admin/training/zuruecksetzen", {}, "Zusatzregeln gelöscht.");
+
 /* ==================== Schnellerkennung ==================== */
 
 const ROOM_LABELS = { schlafzimmer: "Schlafzimmer", arbeitszimmer: "Arbeitszimmer", wohnzimmer: "Wohnzimmer",
@@ -685,6 +808,7 @@ loadStatus();
 loadConfig().catch((err) => show($("cfgMsg"), err.message, false));
 loadUsers().catch((err) => show($("userMsg"), err.message, false));
 loadFast().catch((err) => show($("fastMsg"), err.message, false));
+loadTraining().catch((err) => show($("trMsg"), err.message, false));
 setInterval(loadStatus, 8000);
 </script>
 </body>

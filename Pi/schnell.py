@@ -20,6 +20,7 @@ import time
 
 import config
 import ki
+import training_fern
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, "schnell.db")
@@ -311,7 +312,12 @@ def antworte(text, quelle, pruefen=None):
     """Einstieg fuer Chat und Sprache: erst Schnellerkennung, sonst KI."""
     start = time.time()
     result, ki_text = try_handle(text, quelle, pruefen)
-    if result is None:
+    if result is None and training_fern.busy():
+        # Waehrend des KI-Trainings ist die KI fuer Nutzer gesperrt - einfache Befehle gehen weiter
+        result = {"antwort": "Ich werde gerade trainiert. Einfache Befehle wie „Licht an“ funktionieren, "
+                             "für alles andere versuch es bitte in ein paar Minuten noch einmal.",
+                  "befehle": [], "art": "sonstiges", "rueckfrage": False, "quelle": "wartung"}
+    elif result is None:
         result = ki.handle(ki_text, pruefen)
         result["quelle"] = "ki"
         STATS["ki"] += 1

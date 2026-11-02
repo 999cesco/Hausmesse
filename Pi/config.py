@@ -74,6 +74,9 @@ SCHNELL_FRAGE_RAUM = "In welchem Raum?"
 SCHNELL_FRAGE_PROZENT = "Auf wie viel Prozent?"
 SCHNELL_FRAGE_GRAD = "Auf wie viel Grad?"
 
+# KI-Training laeuft auf dem Server (server/trainingsdienst.py). Leer = Training direkt auf dem Pi
+TRAINING_URL = "http://192.168.95.1:9100"
+
 # ---- Einstellungen aus dem Admin-Bereich ----
 # Was im Browser unter "Einstellungen" geaendert wird, steht in einstellungen.json
 # (von Git ignoriert) und ueberschreibt die Werte oben.
