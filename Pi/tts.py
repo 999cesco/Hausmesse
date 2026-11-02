@@ -70,9 +70,25 @@ def _render(text):
     return data
 
 
+def _louder(data, volume):
+    """Macht die WAV-Daten lauter oder leiser (ohne den gespeicherten Satz zu veraendern)."""
+    import numpy as np
+    with wave.open(io.BytesIO(data), "rb") as w:
+        params, frames = w.getparams(), w.readframes(w.getnframes())
+    a = np.frombuffer(frames, dtype=np.int16).astype(np.float32) * volume
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setparams(params)
+        w.writeframes(np.clip(a, -32768, 32767).astype(np.int16).tobytes())
+    return out.getvalue()
+
+
 def _speak(text):
     start = time.time()
     data = _render(text)
+    volume = getattr(config, "TTS_VOLUME", 1.0)
+    if volume != 1.0:
+        data = _louder(data, volume)
     print(f"[TTS] bereit nach {int((time.time() - start) * 1000)} ms: '{text}'")
     subprocess.run(["aplay", "-q", "-D", config.TTS_DEVICE, "-"], input=data, check=False)
 

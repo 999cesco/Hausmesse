@@ -408,7 +408,10 @@ function renderStatus(s) {
   const v = s.sprache;
   html.push(comp("Sprachsteuerung", !v.aktiv || v.status === "aus" ? "" : v.stumm ? "warn" : "ok",
     v.aktiv ? (VOICE_STATES[v.status] || v.status) : "aus", [
-      ["Wakeword", v.wakeword], ["Zuletzt gehört", v.frage], ["Zuletzt geantwortet", v.antwort],
+      ["Wakeword", v.wakeword],
+      ["Mikrofon-Pegel", v.pegel ? `${v.pegel.mikro} (Rauschen ${v.pegel.rauschen}, Sprache ab ${v.pegel.schwelle})` : null],
+      ["Letzte Aufnahme", v.pegel?.letzte_sprache ? `lautester Moment ${v.pegel.letzte_sprache}` : null],
+      ["Zuletzt gehört", v.frage], ["Zuletzt geantwortet", v.antwort],
     ]));
 
   if (s.training) html.push(comp("KI-Training", "warn", "läuft", [], [["Die KI beantwortet gerade keine Fragen.", ""]]));

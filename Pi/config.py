@@ -42,7 +42,8 @@ HISTORY_MESSAGES = 6     # wie viele vorherige Nachrichten die KI sieht (fuer Ru
 # Sprachausgabe (Piper)
 TTS_ENABLED = True
 TTS_VOICE = "/home/admin/piper/de_DE-thorsten-medium.onnx"   # Pfad zur geladenen Stimme
-TTS_DEVICE = "default"   # Audioausgang fuer aplay
+TTS_DEVICE = "default"
+TTS_VOLUME = 1.0                        # Lautstaerke der Stimme (1 = normal, bis 4)   # Audioausgang fuer aplay
 
 # Sprachsteuerung (Wakeword + Spracherkennung)
 VOICE_ENABLED = True
@@ -58,6 +59,8 @@ PORCUPINE_KEYWORD = "/home/admin/wakeword/wakeword.ppn"         # dein Wakeword
 PORCUPINE_MODEL = "/home/admin/wakeword/porcupine_params_de.pv"  # deutsches Sprachmodell
 PORCUPINE_SENSITIVITY = 0.5             # hoeher = reagiert leichter, aber auch oefter faelschlich
 VAD_LEVEL = 2                           # 0-3, hoeher = strengere Spracherkennung bei Laerm
+MIC_GAIN = 1.0                          # Mikro digital verstaerken (2-4 bei leisen USB-Mikros)
+MIN_SPEECH_RMS = 60                     # so laut muss Sprache mindestens sein
 SILENCE_END_MS = 700                    # so lange Pause = du bist fertig mit Sprechen
 SPEECH_FACTOR = 2.5                     # so viel lauter als das Rauschen muss Sprache sein
 LISTEN_TIMEOUT_MS = 5000                # so lange wird nach dem Piepen auf Sprache gewartet

@@ -50,6 +50,12 @@ def _mic_reader():
             data = proc.stdout.read(CHUNK * 2)
             if len(data) < CHUNK * 2:
                 break
+            gain = getattr(config, "MIC_GAIN", 1.0)
+            if gain != 1.0:                      # leises Mikro digital verstaerken
+                a = np.frombuffer(data, dtype=np.int16).astype(np.float32) * gain
+                data = np.clip(a, -32768, 32767).astype(np.int16).tobytes()
+            level = _rms(data)
+            PEGEL["mikro"] = round(max(level, PEGEL["mikro"] * 0.9))   # fuer die Anzeige im Admin-Bereich
             try:
                 _audio.put_nowait(data)
             except queue.Full:       # niemand liest gerade -> aeltesten Block verwerfen
@@ -97,6 +103,11 @@ def _rms(chunk):
 
 
 _noise = 200.0   # Lautstaerke des Hintergrundrauschens, wird laufend gemessen
+PEGEL = {"mikro": 0, "rauschen": 0, "schwelle": 0, "letzte_sprache": 0}
+
+
+def _threshold():
+    return max(_noise * getattr(config, "SPEECH_FACTOR", 2.5), getattr(config, "MIN_SPEECH_RMS", 60))
 
 
 def _update_noise(chunk):
@@ -105,11 +116,13 @@ def _update_noise(chunk):
     level = _rms(chunk)
     if level < _noise * 3:                     # laute Ausreisser (Sprache) nicht einrechnen
         _noise = 0.95 * _noise + 0.05 * level
+    PEGEL["rauschen"] = round(_noise)
+    PEGEL["schwelle"] = round(_threshold())
 
 
 def _is_speech(vad, chunk):
     """Sprache nur, wenn webrtcvad sie erkennt UND es deutlich lauter ist als das Rauschen."""
-    if _rms(chunk) < max(_noise * getattr(config, "SPEECH_FACTOR", 2.5), 120):
+    if _rms(chunk) < _threshold():
         return False
     voiced = sum(vad.is_speech(chunk[i:i + VAD_FRAME * 2], SAMPLE_RATE)
                  for i in range(0, len(chunk), VAD_FRAME * 2))
@@ -119,20 +132,26 @@ def _is_speech(vad, chunk):
 def _record_command(vad):
     """Nimmt auf, bis nach dem Sprechen eine kurze Pause kommt. Gibt PCM oder None zurueck."""
     frames = []
-    speech_seen = False
+    speech_ms = 0          # wie viel Sprache schon da war - ein kurzer Knacks zaehlt nicht
+    loudest = 0
     silence_ms = 0
     waited_ms = 0
     while True:
         chunk = _audio.get()
         frames.append(chunk)
+        loudest = max(loudest, _rms(chunk))
         if _is_speech(vad, chunk):
-            speech_seen = True
+            speech_ms += CHUNK_MS
             silence_ms = 0
         else:
             silence_ms += CHUNK_MS
         waited_ms += CHUNK_MS
+        speech_seen = speech_ms >= 240          # erst ab einer Viertelsekunde echter Sprache
+        PEGEL["letzte_sprache"] = round(loudest)
 
         if not speech_seen and waited_ms >= config.LISTEN_TIMEOUT_MS:
+            print(f"[VOICE] Keine Sprache erkannt: lautester Moment {loudest:.0f}, Schwelle {_threshold():.0f}. "
+                  "Ist das Mikro zu leise? Dann MIC_GAIN erhoehen.")
             return None                        # niemand hat etwas gesagt
         if speech_seen and silence_ms >= config.SILENCE_END_MS:
             print(f"[VOICE] Aufnahme {waited_ms / 1000:.1f} s (Pause erkannt, Rauschpegel {_noise:.0f})")
@@ -153,6 +172,8 @@ def _dialog(vad):
         _flush()
         _beep(SOUND_START)
         _flush()                               # den eigenen Piepton nicht mitaufnehmen
+        for _ in range(3):                     # Nachhall des Pieptons (ca. 0,25 s) ueberspringen
+            _audio.get()
         pcm = _record_command(vad)
         if pcm is None:
             print("[VOICE] Nichts gehoert")
