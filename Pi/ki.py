@@ -419,6 +419,9 @@ def strip_action_claims(text):
 def describe_state(s):
     """Macht aus dem ESP-JSON einen gut lesbaren Text mit Bewertungen.
     Die Bewertungen rechnet der Code aus - so muss das Modell keine Zahlen deuten."""
+    if s is None:
+        return ("Das Haus (ESP) ist gerade NICHT erreichbar. Es gibt keine Messwerte, "
+                "und schalten geht im Moment nicht. Allgemeine Fragen kannst du trotzdem beantworten.")
     sens = s.get("sensors", {})
     t, h = sens.get("temperature"), sens.get("humidity")
     soil = sens.get("soilPercent")
@@ -457,6 +460,8 @@ def describe_state(s):
 def find_hints(s):
     """Dinge, an die erinnert werden sollte - vom Code erkannt, nicht von der KI."""
     hints = []
+    if s is None:
+        return hints
     for room, v in s.get("windows", {}).items():
         if v == "open":
             hints.append(f"Das Fenster im {ROOM_NAMES.get(room, room)} ist offen.")
@@ -571,8 +576,7 @@ def handle(user_text, pruefen=None):
         try:
             state = get_state()
         except requests.RequestException:
-            return {"antwort": "Ich erreiche das Haus gerade nicht. Ist der ESP eingeschaltet und im WLAN?",
-                    "befehle": [], "fehler": "esp"}
+            state = None          # ESP aus: die KI antwortet trotzdem, schalten geht nur nicht
 
         try:
             raw, result = _ask_model(user_text, state)
@@ -583,6 +587,9 @@ def handle(user_text, pruefen=None):
         commands, ignored, denied = out["befehle"], out["ignoriert"], out["verweigert"]
 
         esp_result = None
+        if commands and state is None:          # ESP nicht erreichbar -> nichts behaupten
+            out["antwort"] = "Das Haus ist gerade nicht erreichbar, deshalb konnte ich nichts schalten."
+            commands = out["befehle"] = []
         if commands:
             try:
                 esp_result = send_commands(commands)

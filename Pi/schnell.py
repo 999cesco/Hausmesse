@@ -229,12 +229,15 @@ def _execute(text, aktion, slots, pruefen):
         try:
             esp = ki.send_commands(cmds)
         except Exception:
-            esp = {"status": "error"}
-        antwort = ki.SCENE_TEXT["alles_aus"] if aktion == "alles_aus" and not denied else ki.confirm(cmds)
-        if denied and msg:
-            antwort += " " + msg
-        if esp.get("status") == "error":
-            antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
+            esp = None
+        if esp is None:                                     # ESP aus oder nicht im WLAN
+            antwort, cmds = "Das Haus ist gerade nicht erreichbar, deshalb konnte ich nichts schalten.", []
+        else:
+            antwort = ki.SCENE_TEXT["alles_aus"] if aktion == "alles_aus" and not denied else ki.confirm(cmds)
+            if denied and msg:
+                antwort += " " + msg
+            if esp.get("status") == "error":
+                antwort += " Allerdings hat das Haus den Befehl nicht angenommen."
     ki.remember(text, antwort, cmds)
     return {"antwort": antwort, "befehle": cmds, "art": "befehl", "rueckfrage": False, "quelle": "schnell"}
 
